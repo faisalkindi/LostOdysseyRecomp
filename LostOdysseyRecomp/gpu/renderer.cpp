@@ -2860,8 +2860,8 @@ namespace gpu::renderer
                 const uint32_t w = dst.ScaleX(std::min(src.guestWidth, dst.guestWidth));
                 const uint32_t h = dst.ScaleY(std::min(src.guestHeight, dst.guestHeight));
                 if (!Begin()) return;
-                Transition(src, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-                Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                TransitionTogether({{&src, RenderTextureLayout::SHADER_READ}, {&dst, RenderTextureLayout::COLOR_WRITE}},
+                    RenderBarrierStage::GRAPHICS);
                 RenderDescriptorSet* set1 = AcquireSet(1);
                 set1->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
                 // A transfer over the whole target (copy blend, all channels)
@@ -3939,8 +3939,8 @@ namespace gpu::renderer
                     slot.bloomPrefilterTextures.push_back(std::move(dst));
                 }
                 HostTexture& dst = *slot.bloomPrefilterTextures[slot.bloomPrefilterUsed++];
-                Transition(src, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-                Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                TransitionTogether({{&src, RenderTextureLayout::SHADER_READ}, {&dst, RenderTextureLayout::COLOR_WRITE}},
+                    RenderBarrierStage::GRAPHICS);
                 auto* set = AcquireSet(1); // Does not submit or change GPU slots.
                 set->setTexture(0, hdrSource ? hdrSource : src.texture.get(), RenderTextureLayout::SHADER_READ);
                 BindTargets(&dst, nullptr);
@@ -4004,8 +4004,8 @@ namespace gpu::renderer
                 if (!pipeline)
                     return false;
                 if (!Begin()) return false;
-                Transition(src, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
-                Transition(dst, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
+                TransitionTogether({{&src, RenderTextureLayout::SHADER_READ}, {&dst, RenderTextureLayout::COLOR_WRITE}},
+                    RenderBarrierStage::GRAPHICS);
                 RenderDescriptorSet* set1 = AcquireSet(1);
                 set1->setTexture(0, src.texture.get(), RenderTextureLayout::SHADER_READ);
                 BindTargets(&dst, nullptr);
@@ -5186,6 +5186,46 @@ void main()
                     return;
                 commandList->barriers(stages, RenderTextureBarrier(tex.texture.get(), layout));
                 tex.layout = layout;
+            }
+
+            // Transitions the textures one operation uses together with a single
+            // barrier: each gets the owed clears and FG bookkeeping of Transition,
+            // then every layout that changes goes into one barriers() call, which
+            // Vulkan records as one vkCmdPipelineBarrier (one GPU wait instead of
+            // one per texture). Null entries are skipped. Entries must name
+            // different textures: two layouts for one image in one barrier are
+            // undefined. markWritable=false leaves the FG bookkeeping to whoever
+            // writes the texture next (see ResolveOnGpu).
+            struct LayoutChange
+            {
+                HostTexture* tex;
+                RenderTextureLayout layout;
+                bool markWritable = true;
+            };
+            void TransitionTogether(std::initializer_list<LayoutChange> changes, RenderBarrierStages stages)
+            {
+                for (const LayoutChange& change : changes)
+                    if (change.tex && !change.tex->pendingClear.Empty() && change.layout != RenderTextureLayout::COLOR_WRITE &&
+                        change.layout != RenderTextureLayout::DEPTH_WRITE)
+                        RunPendingClears(*change.tex);
+                std::array<RenderTextureBarrier, 3> barriers;
+                uint32_t count = 0;
+                for (const LayoutChange& change : changes) {
+                    if (!change.tex) continue;
+                    HostTexture& tex = *change.tex;
+                    if (change.markWritable && (change.layout == RenderTextureLayout::COLOR_WRITE ||
+                        change.layout == RenderTextureLayout::COPY_DEST || change.layout == RenderTextureLayout::GENERAL ||
+                        change.layout == RenderTextureLayout::DEPTH_WRITE))
+                        MarkFgWritable(tex, "writable_transition");
+                    if (tex.layout == change.layout) continue;
+                    if (count == barriers.size()) {
+                        commandList->barriers(stages, barriers.data(), count);
+                        count = 0;
+                    }
+                    barriers[count++] = RenderTextureBarrier(tex.texture.get(), change.layout);
+                    tex.layout = change.layout;
+                }
+                if (count) commandList->barriers(stages, barriers.data(), count);
             }
 
             // ---- deferred EDRAM clears (pending_clear.h) -------------------------
@@ -7513,8 +7553,8 @@ void main()
                     const uint32_t copyWidth = oldTarget->width;
                     const uint32_t copyHeight = oldTarget->height;
                     if (copyWidth > 0 && copyHeight > 0) {
-                        Transition(*oldTarget, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
-                        Transition(*tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                        TransitionTogether({{oldTarget.get(), RenderTextureLayout::COPY_SOURCE},
+                            {tex.get(), RenderTextureLayout::COPY_DEST}}, RenderBarrierStage::COPY);
                         RenderBox box{ 0, 0, int32_t(copyWidth), int32_t(copyHeight), 0, 1 };
                         commandList->copyTextureRegion(
                             RenderTextureCopyLocation::Subresource(tex->texture.get()),
@@ -8130,8 +8170,8 @@ void main()
                         // view still holds this exact copy.
                         if (!rs->writeOrdinal || view->viewSourceOrdinal != rs->writeOrdinal ||
                             view->viewSource != rs->tex->texture.get() || view->viewSourceAllocation != rs->tex->allocationSerial) {
-                            Transition(*rs->tex, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
-                            Transition(*view, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                            TransitionTogether({{rs->tex.get(), RenderTextureLayout::COPY_SOURCE},
+                                {view.get(), RenderTextureLayout::COPY_DEST}}, RenderBarrierStage::COPY);
                             RenderBox box{ 0, 0, int32_t(physicalWidth), int32_t(physicalHeight), 0, 1 };
                             commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(view->texture.get()),
                                 RenderTextureCopyLocation::Subresource(rs->tex->texture.get()), 0, 0, 0, &box);
@@ -9078,9 +9118,8 @@ void main()
                     if (fgUiCapture && fgUiCapture->Valid() && !fgUiCapture->finalRecorded && fgUiCapture->frame == frame &&
                         fgUiCapture->sourceAllocation == color->allocationSerial)
                         fgUiBindingExpected = true;
-                    Transition(*color, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                    if (depth)
-                        Transition(*depth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
+                    TransitionTogether({{color, RenderTextureLayout::COLOR_WRITE}, {depth, RenderTextureLayout::DEPTH_WRITE}},
+                        RenderBarrierStage::GRAPHICS);
 
                     // LO_CLEAR_RT=1: wipe every colour target the first time a frame
                     // touches it. Targets normally survive across frames, so a
@@ -10138,8 +10177,8 @@ void main()
                                     for (uint32_t i=0;i<16;++i) vp[i]=std::bit_cast<float>(temporalScene.Anchor().vpBits[i]);
                                     auto camera = temporal::Camera::Create(vp,temporalScene.Anchor().viewport);
                                     if (camera) {
-                                        Transition(*tex,RenderTextureLayout::SHADER_READ,RenderBarrierStage::GRAPHICS);
-                                        Transition(*sourceDepth->tex,RenderTextureLayout::SHADER_READ,RenderBarrierStage::GRAPHICS);
+                                        TransitionTogether({{tex,RenderTextureLayout::SHADER_READ},
+                                            {sourceDepth->tex.get(),RenderTextureLayout::SHADER_READ}},RenderBarrierStage::GRAPHICS);
                                         ao::Inputs inputs;
                                         inputs.color=tex->texture.get();inputs.depth=sourceDepth->tex->texture.get();
                                         inputs.camera=&*camera;inputs.width=tex->width;inputs.height=tex->height;
@@ -12824,9 +12863,8 @@ void main()
                         HostTexture* otherDepth = depth ? GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, k.pitch, target->guestHeight, true) : nullptr;
                         if (otherDepth && (otherDepth->width != target->width || otherDepth->height != target->height))
                             continue;
-                        Transition(*target, RenderTextureLayout::COLOR_WRITE, RenderBarrierStage::GRAPHICS);
-                        if (otherDepth)
-                            Transition(*otherDepth, RenderTextureLayout::DEPTH_WRITE, RenderBarrierStage::GRAPHICS);
+                        TransitionTogether({{target, RenderTextureLayout::COLOR_WRITE}, {otherDepth, RenderTextureLayout::DEPTH_WRITE}},
+                            RenderBarrierStage::GRAPHICS);
                         BindTargets(target, otherDepth);
                         // Viewport such that the rectangle's NDC bounds land on the full texture.
                         const float vpW = 2.0f * float(target->width) / (nx1 - nx0);
@@ -13293,7 +13331,7 @@ void main()
             // k_24_8 / k_24_8_FLOAT fetches read (.x = stored depth, our reversed
             // range included, exactly what the guest wrote).
             bool ResolveDepthOnGpu(HostTexture& depth, uint32_t destBase, uint32_t destFormat, uint32_t destPitch, uint32_t destHeight,
-                                   uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+                                   uint32_t x0, uint32_t y0, uint32_t w, uint32_t h, bool clearFollows = false)
             {
                 consecutiveResolveCopies.Invalidate();
                 if (!Begin()) return false;
@@ -13354,13 +13392,16 @@ void main()
                         return false;
                     }
                 } else {
-                    Transition(depth, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
-                    Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                    TransitionTogether({{&depth, RenderTextureLayout::COPY_SOURCE}, {rs.tex.get(), RenderTextureLayout::COPY_DEST}},
+                        RenderBarrierStage::COPY);
                     RenderBox box{ int32_t(x0), int32_t(y0), int32_t(x0 + w), int32_t(y0 + h), 0, 1 };
                     commandList->copyTextureRegion(RenderTextureCopyLocation::Subresource(rs.tex->texture.get()),
                         RenderTextureCopyLocation::Subresource(depth.texture.get(), 0), x0, y0, 0, &box);
                 }
-                Transition(*rs.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                // The clear queued right after this resolve sends the source back
+                // to DEPTH_WRITE whatever uses it first, so it moves with this barrier.
+                TransitionTogether({{rs.tex.get(), RenderTextureLayout::SHADER_READ},
+                    {clearFollows ? &depth : nullptr, RenderTextureLayout::DEPTH_WRITE, false}}, RenderBarrierStage::GRAPHICS);
                 rs.frame = frame;
                 rs.writeOrdinal = ++resolveWriteOrdinal;
                 rs.writeX = x0; rs.writeY = y0; rs.writeWidth = w; rs.writeHeight = h;
@@ -13387,7 +13428,7 @@ void main()
             // destination memory (destPitch x destHeight texels, rectangle placed at its
             // window position). No GPU sync, no tiling, no guest memory writes.
             bool ResolveOnGpu(HostTexture& color, uint32_t destBase, uint32_t destFormat, uint32_t destPitch, uint32_t destHeight,
-                              uint32_t x0, uint32_t y0, uint32_t w, uint32_t h)
+                              uint32_t x0, uint32_t y0, uint32_t w, uint32_t h, bool clearFollows = false)
             {
                 if (!Begin()) return false;
                 const uint32_t guestW = std::clamp<uint32_t>(std::max(destPitch, x0 + w), 1, 8192);
@@ -13454,8 +13495,8 @@ void main()
                 const char* resolveOperation = rs.tex->format == color.format ? "copy" : "blit";
                 if (rs.tex->format == color.format)
                 {
-                    Transition(color, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
-                    Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                    TransitionTogether({{&color, RenderTextureLayout::COPY_SOURCE}, {rs.tex.get(), RenderTextureLayout::COPY_DEST}},
+                        RenderBarrierStage::COPY);
                     const resolve_copy::Copy copy{color.allocationSerial, rs.tex->allocationSerial,
                         color.width, color.height, texW, texH, uint32_t(color.format), x0, y0, w, h};
                     // Diagnostic: "set resolve_copy_reuse 1|2" (on|off) over the Switch network log.
@@ -13475,7 +13516,13 @@ void main()
                 }
                 else if (!BlitRegion(color, *rs.tex, x0, y0, w, h))
                     return false;
-                Transition(*rs.tex, RenderTextureLayout::SHADER_READ, RenderBarrierStage::GRAPHICS);
+                // A resolve that also clears its source queues that clear next, and
+                // the clear needs the source in COLOR_WRITE whatever uses it first, so
+                // that transition rides on this barrier. Only the layout moves here:
+                // the FG write bookkeeping stays with the clear (ResolveImpl), after
+                // the FG resolve records below have read the source.
+                TransitionTogether({{rs.tex.get(), RenderTextureLayout::SHADER_READ},
+                    {clearFollows ? &color : nullptr, RenderTextureLayout::COLOR_WRITE, false}}, RenderBarrierStage::GRAPHICS);
                 rs.frame = frame;
                 rs.writeOrdinal = ++resolveWriteOrdinal;
                 rs.writeX = x0; rs.writeY = y0; rs.writeWidth = w; rs.writeHeight = h;
@@ -13550,8 +13597,8 @@ void main()
                         if (target->texture) rs.hdrTex = std::move(target);
                     }
                     if (rs.hdrTex && rs.hdrTex->texture) {
-                        Transition(*color.hdrSidecar, RenderTextureLayout::COPY_SOURCE, RenderBarrierStage::COPY);
-                        Transition(*rs.hdrTex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
+                        TransitionTogether({{color.hdrSidecar.get(), RenderTextureLayout::COPY_SOURCE},
+                            {rs.hdrTex.get(), RenderTextureLayout::COPY_DEST}}, RenderBarrierStage::COPY);
                         RenderBox box{0, 0, int32_t(texW), int32_t(texH), 0, 1};
                         commandList->copyTextureRegion(
                             RenderTextureCopyLocation::Subresource(rs.hdrTex->texture.get()),
@@ -13636,7 +13683,8 @@ void main()
                     HostTexture* depthRt = GetRenderTarget(depthInfo & 0xFFF, (depthInfo >> 16) & 1, pitch, rtHeight, true);
                     if (depthRt && !resolveReadback)
                     {
-                        if (!ResolveDepthOnGpu(*depthRt, destBase, destFormat | kDepthResolveTag, destPitch, destHeight, x0, y0, copyWidth, copyHeight))
+                        if (!ResolveDepthOnGpu(*depthRt, destBase, destFormat | kDepthResolveTag, destPitch, destHeight, x0, y0, copyWidth, copyHeight,
+                                (copyControl & 0x200) != 0))
                             return;
                         InvalidateRange(destBase, ((destPitch + 31) & ~31u) * copyHeight * 4);
                     }
@@ -13671,7 +13719,8 @@ void main()
                 if (!color || !color->texture) return;
                 if (!resolveReadback)
                 {
-                    if (!ResolveOnGpu(*color, destBase, destFormat, destPitch, destHeight, x0, y0, copyWidth, copyHeight))
+                    if (!ResolveOnGpu(*color, destBase, destFormat, destPitch, destHeight, x0, y0, copyWidth, copyHeight,
+                            (copyControl & 0x100) != 0))
                         return;
                     InvalidateRange(destBase, ((destPitch + 31) & ~31u) * copyHeight * (destFormat == 32 ? 8 : 4));
                 }

@@ -730,8 +730,10 @@ void Presentation::DrawOverlay(RenderCommandList *commands, RenderTexture *overl
     // Each present records after the previous one completed, so one
     // descriptor set serves every frame's overlay.
     p.overlayDescriptors->setTexture(0, overlay, RenderTextureLayout::SHADER_READ);
-    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(overlay, RenderTextureLayout::SHADER_READ));
-    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(target, RenderTextureLayout::COLOR_WRITE));
+    // One barrier call per pass: Vulkan records one vkCmdPipelineBarrier for all of them.
+    const RenderTextureBarrier overlayBarriers[] = {RenderTextureBarrier(overlay, RenderTextureLayout::SHADER_READ),
+        RenderTextureBarrier(target, RenderTextureLayout::COLOR_WRITE)};
+    commands->barriers(RenderBarrierStage::GRAPHICS, overlayBarriers, 2);
     commands->setFramebuffer(p.FramebufferFor(target, targetWidth, targetHeight));
     const RenderViewport viewport{float(x), float(y), float(width), float(height)};
     const RenderRect scissor{int32_t(x), int32_t(y), int32_t(x + width), int32_t(y + height)};
@@ -758,8 +760,9 @@ bool Presentation::ProcessSceneColor(RenderCommandList *commands, RenderTexture 
     PresentationOptions options{antialiasing, ScalingFilter::Bilinear};
     options.hdrScene = hdr;
     Draw(commands, source, target, width, height, width, height, options, false);
-    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(source, RenderTextureLayout::SHADER_READ));
-    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(target, RenderTextureLayout::SHADER_READ));
+    const RenderTextureBarrier readBarriers[] = {RenderTextureBarrier(source, RenderTextureLayout::SHADER_READ),
+        RenderTextureBarrier(target, RenderTextureLayout::SHADER_READ)};
+    commands->barriers(RenderBarrierStage::GRAPHICS, readBarriers, 2);
     return true;
 }
 RenderTexture* Presentation::ComposeHdrGain(RenderCommandList *commands, RenderTexture *sdr, RenderTexture *hdr,
@@ -793,9 +796,10 @@ RenderTexture* Presentation::ComposeHdrGain(RenderCommandList *commands, RenderT
     }
     pass.descriptors->setTexture(0, sdr, RenderTextureLayout::SHADER_READ);
     pass.descriptors->setTexture(2, hdr, RenderTextureLayout::SHADER_READ);
-    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(sdr, RenderTextureLayout::SHADER_READ));
-    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(hdr, RenderTextureLayout::SHADER_READ));
-    commands->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(pass.texture.get(), RenderTextureLayout::COLOR_WRITE));
+    const RenderTextureBarrier gainBarriers[] = {RenderTextureBarrier(sdr, RenderTextureLayout::SHADER_READ),
+        RenderTextureBarrier(hdr, RenderTextureLayout::SHADER_READ),
+        RenderTextureBarrier(pass.texture.get(), RenderTextureLayout::COLOR_WRITE)};
+    commands->barriers(RenderBarrierStage::GRAPHICS, gainBarriers, 3);
     commands->setFramebuffer(pass.framebuffer.get());
     RenderViewport viewport(0, 0, float(width), float(height));
     RenderRect scissor(0, 0, width, height);
@@ -833,12 +837,10 @@ std::shared_ptr<Presentation::UiCompositionLease> Presentation::DrawSeparatedUi(
     if (!lease->framebuffer) return {};
     lease->descriptors->setTexture(0, hudless, RenderTextureLayout::SHADER_READ);
     lease->descriptors->setTexture(1, uiColorAndAlpha, RenderTextureLayout::SHADER_READ);
-    commands->barriers(RenderBarrierStage::GRAPHICS,
-        RenderTextureBarrier(hudless, RenderTextureLayout::SHADER_READ));
-    commands->barriers(RenderBarrierStage::GRAPHICS,
-        RenderTextureBarrier(uiColorAndAlpha, RenderTextureLayout::SHADER_READ));
-    commands->barriers(RenderBarrierStage::GRAPHICS,
-        RenderTextureBarrier(target, RenderTextureLayout::COLOR_WRITE));
+    const RenderTextureBarrier uiBarriers[] = {RenderTextureBarrier(hudless, RenderTextureLayout::SHADER_READ),
+        RenderTextureBarrier(uiColorAndAlpha, RenderTextureLayout::SHADER_READ),
+        RenderTextureBarrier(target, RenderTextureLayout::COLOR_WRITE)};
+    commands->barriers(RenderBarrierStage::GRAPHICS, uiBarriers, 3);
     commands->setFramebuffer(lease->framebuffer.get());
     RenderViewport viewport(0, 0, float(width), float(height));
     RenderRect scissor(0, 0, width, height);
@@ -946,10 +948,10 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
         pass.descriptors->setTexture(0,input,RenderTextureLayout::SHADER_READ);
         auto* calibration = options.calibrationScene ? options.calibrationScene : input;
         pass.descriptors->setTexture(2,calibration,RenderTextureLayout::SHADER_READ);
-        if (calibration != input)
-            commands->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(calibration,RenderTextureLayout::SHADER_READ));
-        commands->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(input,RenderTextureLayout::SHADER_READ));
-        commands->barriers(RenderBarrierStage::GRAPHICS,RenderTextureBarrier(output,RenderTextureLayout::COLOR_WRITE));
+        const RenderTextureBarrier passBarriers[]={RenderTextureBarrier(input,RenderTextureLayout::SHADER_READ),
+            RenderTextureBarrier(output,RenderTextureLayout::COLOR_WRITE),
+            RenderTextureBarrier(calibration,RenderTextureLayout::SHADER_READ)};
+        commands->barriers(RenderBarrierStage::GRAPHICS,passBarriers,calibration != input ? 3u : 2u);
         // The triangle writes every pixel inside the viewport without blending
         // or discard, so only letterbox bars need the clear.
         const bool covered=framebuffer && framebuffer->getWidth()==tw && framebuffer->getHeight()==th &&
@@ -1005,8 +1007,9 @@ void Presentation::Draw(RenderCommandList *commands, RenderTexture *source, Rend
         set.setTexture(0,source,RenderTextureLayout::SHADER_READ);
         set.setTexture(2,source,RenderTextureLayout::SHADER_READ);
         set.setTexture(4,target,RenderTextureLayout::GENERAL);
-        commands->barriers(RenderBarrierStage::COMPUTE,RenderTextureBarrier(source,RenderTextureLayout::SHADER_READ));
-        commands->barriers(RenderBarrierStage::COMPUTE,RenderTextureBarrier(target,RenderTextureLayout::GENERAL));
+        const RenderTextureBarrier computeBarriers[]={RenderTextureBarrier(source,RenderTextureLayout::SHADER_READ),
+            RenderTextureBarrier(target,RenderTextureLayout::GENERAL)};
+        commands->barriers(RenderBarrierStage::COMPUTE,computeBarriers,2);
         const auto constants=parameters(x,y,width,height,sw,sh,0,uint32_t(options.scalingFilter),
             options.expandRgbRange ? 1u : 0u,true,p.output.linear);
         commands->setComputePipelineLayout(p.computeLayout.get());
