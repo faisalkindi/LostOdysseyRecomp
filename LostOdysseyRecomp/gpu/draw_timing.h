@@ -35,6 +35,18 @@ namespace gpu::draw_timing
         return every;
     }
 
+    // LO_GPU_DRAW_TIMING_GROUP=N: draws per measured interval (default 4; 1
+    // times every draw, which fits frames of up to ~2000 draws).
+    inline uint32_t GroupSize()
+    {
+        static const uint32_t size = [] {
+            const char* value = std::getenv("LO_GPU_DRAW_TIMING_GROUP");
+            const unsigned long n = value ? std::strtoul(value, nullptr, 10) : 4ul;
+            return uint32_t(n >= 1 && n <= 64 ? n : 4);
+        }();
+        return size;
+    }
+
     inline bool IsTarget(uint64_t frame)
     {
         return (TargetFrame() && TargetFrame() == frame) || (Every() && frame && frame % Every() == 0);
@@ -80,7 +92,7 @@ namespace gpu::draw_timing
         {
             if (!recording || written >= kQueryCount - 1) return;
             draws.push_back({vs, ps, ordinal, indices, width, height});
-            if ((draws.size() % 4) == 0) Mark(list);
+            if ((draws.size() % GroupSize()) == 0) Mark(list);
         }
 
         void End(plume::RenderCommandList* list)
