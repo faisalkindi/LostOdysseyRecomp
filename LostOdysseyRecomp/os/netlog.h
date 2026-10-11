@@ -13,8 +13,13 @@ namespace os::netlog
 // Called once LO_NETLOG is known; drops what was buffered when it is off.
 void Start(const char* setting);
 void Write(const char* data, size_t size);
+// Diagnostic switches the PC sets while the game runs ("set <name> <value>"
+// over the connection, tools/switch/netlog.py --send), so one launch can
+// compare several settings. 0 until set. Any thread.
+int Switch(const char* name);
 #else
 inline void Start(const char*) {}
 inline void Write(const char*, size_t) {}
+inline int Switch(const char*) { return 0; }
 #endif
 }

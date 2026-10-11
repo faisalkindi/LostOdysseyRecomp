@@ -58,6 +58,8 @@ inline constexpr Size ResolveInternalSize(uint32_t mode, uint32_t outputWidth, u
     switch (mode) {
     case 720: case 1080: case 1440: case 2160: return forMode(mode);
     default:
+        // Below 720 only the Switch's Validate lets a height through.
+        if (mode >= 360 && mode < 720) return forMode(mode);
         if (!hasOutput) return {};
         // Follow the output, capping the 16:9 area at 2160 rows.
         if (tall) return forWidth((std::clamp)(outputWidth, 1u, 3840u));

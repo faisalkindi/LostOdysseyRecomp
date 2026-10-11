@@ -5,6 +5,7 @@
 #include <string_view>
 #include "settings/config.h"
 #include "kernel/memory.h"
+#include "os/netlog.h"
 #include "cpu/ppc_context.h"
 
 extern "C" PPC_FUNC(__imp__sub_82290AB8);
@@ -110,6 +111,9 @@ namespace gpu::frame_plan
     {
         const uint64_t extent = drawable.load(std::memory_order_acquire);
         auto config = settings::GetConfig();
+        // Diagnostic: "set internal_resolution <height>" over the Switch network log.
+        if (const int height = os::netlog::Switch("internal_resolution"); height >= 360 && height <= 720)
+            config.internalResolution = height;
         static const bool readback = getenv("LO_RESOLVE_READBACK") != nullptr;
         static const bool dlssInputProbe = [] { const char* value = getenv("LO_DLSS_INPUT_PROBE"); return value && std::string_view(value) == "1"; }();
         const resolution::Size drawableSize{uint32_t(extent >> 32), uint32_t(extent)};

@@ -2,6 +2,10 @@
 """Receive the Switch build's live log (LO_NETLOG=1 in env.txt, see docs/SWITCH.md).
 
     python tools/switch/netlog.py 192.168.1.87 [--port 28780] [--out netlog.txt] [--grep TEXT]
+    python tools/switch/netlog.py 192.168.1.87 --send "set internal_resolution 540"
+
+--send writes one command line once connected and returns after --seconds.
+The console serves one connection at a time: stop a running receiver first.
 
 The console listens and streams the runtime log and stderr, starting with the
 newest megabyte. This keeps reconnecting, so it can run before the game starts
@@ -31,7 +35,10 @@ def main():
     parser.add_argument("--port", type=int, default=28780)
     parser.add_argument("--out", default="netlog.txt")
     parser.add_argument("--grep", action="append", default=[], help="print only lines containing this (repeatable)")
+    parser.add_argument("--send", help='a command for the game, e.g. "set internal_resolution 540"')
+    parser.add_argument("--seconds", type=float, default=10, help="with --send: how long to keep receiving")
     args = parser.parse_args()
+    stop_at = None
 
     with open(args.out, "ab") as out:
         while True:
@@ -42,9 +49,18 @@ def main():
                     banner = f"--- connected {time.strftime('%Y-%m-%d %H:%M:%S')} ---\n".encode()
                     out.write(banner)
                     out.flush()
+                    if args.send:
+                        conn.sendall(args.send.encode() + b"\n")
+                        stop_at = time.time() + args.seconds
+                        conn.settimeout(1)
                     pending = b""
                     while True:
-                        data = conn.recv(65536)
+                        if stop_at and time.time() > stop_at:
+                            return
+                        try:
+                            data = conn.recv(65536)
+                        except socket.timeout:
+                            continue
                         if not data:
                             break
                         out.write(data)
@@ -57,6 +73,8 @@ def main():
                                 print(text, flush=True)
             except OSError:
                 pass
+            if stop_at and time.time() > stop_at:
+                return
             time.sleep(2)
 
 

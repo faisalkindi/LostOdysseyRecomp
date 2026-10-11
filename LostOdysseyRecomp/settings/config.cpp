@@ -34,10 +34,16 @@ Config Validate(Config value)
     value.displayName = TextValue(std::move(value.displayName));
     value.gameLanguagePack = PackId(std::move(value.gameLanguagePack));
     if (value.displayName.empty() || value.displayIndex > 63) value.displayIndex = 0;
+#if LO_PLATFORM_SWITCH
+    // The game's 720p scene, or a lower height (360 and up) for speed.
+    if (value.internalResolution < 360 || value.internalResolution > 720)
+        value.internalResolution = 720;
+#else
     if (value.internalResolution != 0 && value.internalResolution != InternalResolutionNative &&
         value.internalResolution != 720 && value.internalResolution != 1080 &&
         value.internalResolution != 1440 && value.internalResolution != 2160)
         value.internalResolution = 0;
+#endif
 #if LO_PLATFORM_MACOS
     if (value.scalingQuality > ScalingMetalFx) value.scalingQuality = 1;
 #else
@@ -126,9 +132,8 @@ Config Validate(Config value)
         value.aspectRatio = gpu::aspect_ratio::Mode::Auto;
 #endif
 #if LO_PLATFORM_SWITCH
-    // The Xbox 360 image: the game's own 720p scene, retail shadow maps and none
-    // of the host AA, AO, filtering, upscaling or HDR passes. The menu hides them.
-    value.internalResolution = 720;
+    // The Xbox 360 image: retail shadow maps and none of the host AA, AO,
+    // filtering, upscaling or HDR passes. The menu hides them.
     value.shadowResolution = 1;
     value.antialiasing = 0;
     value.fxaa = false;

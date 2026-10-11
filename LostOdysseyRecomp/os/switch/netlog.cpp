@@ -33,12 +33,50 @@ uint64_t g_end = 0;    // bytes ever written
 int g_port = kDefaultPort;
 Thread g_thread;
 
-// The PC closed the connection, or it failed.
-bool Closed(int client)
+struct NamedSwitch
+{
+    char name[32];
+    std::atomic<int> value;
+};
+NamedSwitch g_switches[8];
+std::atomic<int> g_switchCount{0};
+
+void SetSwitch(const char* name, int value)
+{
+    const int count = g_switchCount.load(std::memory_order_acquire);
+    for (int i = 0; i < count; ++i)
+        if (std::strcmp(g_switches[i].name, name) == 0)
+        {
+            g_switches[i].value.store(value, std::memory_order_release);
+            return;
+        }
+    if (count == int(std::size(g_switches)) || std::strlen(name) >= sizeof(g_switches[0].name))
+        return;
+    std::strcpy(g_switches[count].name, name);
+    g_switches[count].value.store(value, std::memory_order_relaxed);
+    g_switchCount.store(count + 1, std::memory_order_release); // only the netlog thread adds
+}
+
+// Reads "set <name> <value>" lines from the PC. False once the PC closed the
+// connection or it failed.
+bool Receive(int client)
 {
     char data[64];
-    const ssize_t n = recv(client, data, sizeof(data), MSG_DONTWAIT);
-    return n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK);
+    const ssize_t n = recv(client, data, sizeof(data) - 1, MSG_DONTWAIT);
+    if (n == 0 || (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK))
+        return false;
+    if (n > 0)
+    {
+        data[n] = 0;
+        char name[32];
+        int value = 0;
+        if (std::sscanf(data, "set %31s %d", name, &value) == 2)
+        {
+            SetSwitch(name, value);
+            std::fprintf(stderr, "netlog: %s=%d\n", name, value);
+        }
+    }
+    return true;
 }
 
 // One client at a time; the next one waits until the current one closes.
@@ -86,7 +124,7 @@ void Serve(void*)
             {
                 // Nothing to send, so only a read notices that the PC left.
                 pollfd event{client, POLLIN, 0};
-                if (poll(&event, 1, 50) > 0 && Closed(client))
+                if (poll(&event, 1, 50) > 0 && !Receive(client))
                     break;
                 continue;
             }
@@ -150,6 +188,15 @@ void Start(const char* setting)
     }
     g_state = On;
     std::fprintf(stderr, "netlog: listening on port %d (tools/switch/netlog.py <console IP>)\n", g_port);
+}
+
+int Switch(const char* name)
+{
+    const int count = g_switchCount.load(std::memory_order_acquire);
+    for (int i = 0; i < count; ++i)
+        if (std::strcmp(g_switches[i].name, name) == 0)
+            return g_switches[i].value.load(std::memory_order_acquire);
+    return 0;
 }
 
 void Write(const char* data, size_t size)
