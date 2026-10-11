@@ -82,6 +82,7 @@
 #include <kernel/xex_loader.h>
 #include <os/logger.h>
 #include <os/shader_log.h>
+#include <os/netlog.h>
 #include <os/stale_files.h>
 #include <os/thread_name.h>
 #include "color_qualification.h"
@@ -7526,7 +7527,10 @@ void main()
                 static const char* transferMode = getenv("LO_EDRAM_TRANSFER") ? getenv("LO_EDRAM_TRANSFER") : "draw";
                 static const bool transferNever = strcmp(transferMode, "0") == 0 || strcmp(transferMode, "none") == 0;
                 static const bool transferOnDraw = strcmp(transferMode, "draw") == 0;
-                const bool doTransfer = !transferNever && (forRead || transferOnDraw);
+                // Diagnostic: "set edram_transfer 1|2|3" (draw|read|none) over the Switch network log.
+                const int liveTransfer = os::netlog::Switch("edram_transfer");
+                const bool doTransfer = liveTransfer ? liveTransfer != 3 && (forRead || liveTransfer == 1) :
+                    !transferNever && (forRead || transferOnDraw);
                 auto [owner, firstOwner] = tileOwner.try_emplace({ base, pitch }, colorClass);
                 if (doTransfer && !firstOwner && owner->second != colorClass)
                 {
@@ -13430,7 +13434,9 @@ void main()
                     Transition(*rs.tex, RenderTextureLayout::COPY_DEST, RenderBarrierStage::COPY);
                     const resolve_copy::Copy copy{color.allocationSerial, rs.tex->allocationSerial,
                         color.width, color.height, texW, texH, uint32_t(color.format), x0, y0, w, h};
-                    if (resolveCopyReuse && consecutiveResolveCopies.CanReuse(copy)) {
+                    // Diagnostic: "set resolve_copy_reuse 1|2" (on|off) over the Switch network log.
+                    const int liveReuse = os::netlog::Switch("resolve_copy_reuse");
+                    if ((liveReuse ? liveReuse == 1 : resolveCopyReuse) && consecutiveResolveCopies.CanReuse(copy)) {
                         ++resolveCopiesSkipped;
                         resolveOperation = "copy_reused";
                     }

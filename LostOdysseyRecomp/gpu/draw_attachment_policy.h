@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <os/netlog.h>
 
 namespace gpu::draw_attachment {
 // Keep a color-only draw (including a masked/discarding one) on its original
@@ -26,6 +27,8 @@ inline bool KeepColorForDepthOnly() {
         return value && std::strcmp(value, "1") == 0;
 #endif
     }();
+    // Diagnostic: "set depth_only_keep_color 1|2" (on|off) over the Switch network log.
+    if (const int live = os::netlog::Switch("depth_only_keep_color")) return live == 1;
     return keep;
 }
 }
