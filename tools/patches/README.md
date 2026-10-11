@@ -73,6 +73,8 @@ Vulkan 改动应从受跟踪的 plume 子模块状态和上方补丁应用；它
 
 2026-10-10 开始时的清除（EDRAM 清除延迟执行）：Vulkan render pass 还没开始时，覆盖整个 framebuffer 的 `clearColor`／`clearDepthStencil` 不再录 `vkCmdClearAttachments`，而是记成开始时的清除；下一个 draw、清除矩形或遮挡查询开始 pass 时，用把这些附件设为 `loadOp=CLEAR` 的 render pass 变体（深度和模板分开），变体按清除掩码缓存在 framebuffer 上，与原 render pass 兼容，管线不变。没有 draw 就结束时（换 framebuffer、barrier、拷贝、命令列表结束等，都经过 `endActiveRenderPass`），照样录一个只做清除的空 pass。只读深度 framebuffer 不受影响；变体创建失败时退回 pass 内清除。D3D12 和 Metal 不变。2026-10-11 与 main 的管线去重和 swapchain storage 改动合并：在固定 HEAD `d890ac8` 的干净副本上合并两边的源码后重新生成补丁。lostodyssey → sdl3 → android → macos 和 lostodyssey → sdl3 → switch（LostOdysseyNX 分支的 `plume-switch.patch`）两条链都能干净应用。
 
+2026-10-11 Vulkan barrier 访问掩码：`barriers()` 的图像 barrier 不再两侧都用 `MEMORY_READ|MEMORY_WRITE`，而是按旧、新 layout 和 stage 填：源侧只写该 layout 可能有的写（颜色附件写、深度模板附件写、传输写），只读 layout 和 UNDEFINED 为 0，并把这些写所在的 stage 并入源 stage；目标侧只写目标 stage 会做的访问（颜色附件读写、深度模板附件读写、着色器读、传输读或写）。GENERAL、目标 stage 都用不到的 layout 仍用完整掩码，PRESENT 为 0。buffer barrier 不变。驱动按这些位刷新和失效缓存，所以每条 barrier 不再刷新全部缓存。新补丁在固定 HEAD `d890ac8` 的干净副本上逐字节往返一致，lostodyssey → sdl3 → android → macos 能干净应用，LostOdysseyNX 的 `plume-switch.patch` 也仍能叠加。
+
 ## macOS: plume Metal patch
 
 `plume-macos.patch` applies after `plume-lostodyssey.patch` and `plume-sdl3.patch` and changes `plume_metal.cpp`, `plume_metal.h`, `plume_apple.h`, `plume_apple.mm` and plume's `CMakeLists.txt` (the Apple files and the CMake change come with HDR output, PR #145):
