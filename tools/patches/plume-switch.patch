@@ -28,7 +28,7 @@ index 6ebdd63..b2149f3 100644
      typedef HWND RenderWindow;
  
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
-index cf5b792..093248d 100644
+index cf5b792..4d6a15d 100644
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
 @@ -20,6 +20,16 @@
@@ -70,7 +70,50 @@ index cf5b792..093248d 100644
          VK_GOOGLE_DISPLAY_TIMING_EXTENSION_NAME,
          // Vulkan spec requires this to be enabled if supported by the driver.
          VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME,
-@@ -2571,7 +2585,19 @@ namespace plume {
+@@ -898,6 +912,12 @@ namespace plume {
+             bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+             bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+             createInfo.preferredFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
++#   if defined(__SWITCH__)
++            // Diagnostic: see LO_VK_IMAGE_COHERENT.
++            if (std::getenv("LO_VK_BUFFER_COHERENT") != nullptr) {
++                createInfo.requiredFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
++            }
++#   endif
+             break;
+         case RenderHeapType::UPLOAD:
+             bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+@@ -1062,12 +1082,29 @@ namespace plume {
+         VmaAllocationCreateInfo createInfo = {};
+         createInfo.pool = (pool != nullptr) ? pool->vk : VK_NULL_HANDLE;
+         createInfo.preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
++#   if defined(__SWITCH__)
++        // Diagnostic: NVK on Tegra offers a host-cached and a host-coherent type,
++        // both device-local; VMA picks the cached one. LO_VK_IMAGE_COHERENT=1
++        // requires the coherent one instead.
++        static const bool imageCoherent = std::getenv("LO_VK_IMAGE_COHERENT") != nullptr;
++        if (imageCoherent) {
++            createInfo.requiredFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
++        }
++#   endif
+ 
+         if (desc.committed) {
+             createInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+         }
+ 
+         VkResult res = vmaCreateImage(device->allocator, &imageInfo, &createInfo, &vk, &allocation, &allocationInfo);
++#   if defined(__SWITCH__)
++        static int loggedImages = 0;
++        if ((res == VK_SUCCESS) && (loggedImages < 4)) {
++            loggedImages++;
++            fprintf(stderr, "plume: image %ux%u format %u usage 0x%X tiling %d memory type %u\n", imageInfo.extent.width,
++                imageInfo.extent.height, unsigned(imageInfo.format), unsigned(imageInfo.usage), int(imageInfo.tiling), allocationInfo.memoryType);
++        }
++#   endif
+         if (res != VK_SUCCESS) {
+             PLUME_LOG_ERROR("Vulkan", "vmaCreateImage", LogErrorDomain::VkResult, res,
+                 "width=%u height=%u depth=%u layers=%u format=%u usage=0x%X flags=0x%X",
+@@ -2571,7 +2608,19 @@ namespace plume {
  
          VkResult res;
  
@@ -91,7 +134,7 @@ index cf5b792..093248d 100644
          const WindowPixelContext pixels;
          if (!pixels.ready()) return;
          assert(desc.renderWindow != 0);
-@@ -3055,7 +3081,18 @@ namespace plume {
+@@ -3055,7 +3104,18 @@ namespace plume {
      }
  
      void VulkanSwapChain::getWindowSize(uint32_t &dstWidth, uint32_t &dstHeight) const {
@@ -111,7 +154,7 @@ index cf5b792..093248d 100644
          GetWindowClientPixels(desc.renderWindow, dstWidth, dstHeight);
  #   elif defined(PLUME_SDL_VULKAN_ENABLED)
          SDL_GetWindowSizeInPixels(desc.renderWindow, (int *)(&dstWidth), (int *)(&dstHeight));
-@@ -4884,6 +4921,14 @@ namespace plume {
+@@ -4884,6 +4944,14 @@ namespace plume {
  
          // Store properties.
          vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
@@ -126,7 +169,7 @@ index cf5b792..093248d 100644
  
          // Check for supported features.
          void *featuresChain = nullptr;
-@@ -5781,7 +5826,21 @@ namespace plume {
+@@ -5781,7 +5849,21 @@ namespace plume {
          this->extensionHooks = extensionHooks;
          // A host may have initialised volk from a custom loader (Android
          // libadrenotools); keep that entry point instead of the system one.
