@@ -6215,13 +6215,13 @@ void main()
                     if (job->shader) {
                         LoadShaderJob(*job, pack);
                     } else if (!job->needVs && !job->needPs) {
-                        try { job->pipeline = device->createGraphicsPipeline(job->desc); }
+                        try { job->pipeline = NakAttributed(job->key, [&] { return device->createGraphicsPipeline(job->desc); }); }
                         catch (const std::exception& e) { LOG_WARNING("renderer: scene prefetch: {}", e.what()); }
                     } else if ((!job->needVs || NeedShaderJob(*job->needVs, pack)) && (!job->needPs || NeedShaderJob(*job->needPs, pack))) {
                         // MakeLoadingJob made no job for a rect-list recipe without its VS variant.
                         try {
-                            job->pipeline = device->createGraphicsPipeline(DescribeWithShaderJobs(job->key, job->vs, job->ps,
-                                job->needVs.get(), job->needPs.get(), job->desc.fastLink));
+                            job->pipeline = NakAttributed(job->key, [&] { return device->createGraphicsPipeline(DescribeWithShaderJobs(job->key, job->vs, job->ps,
+                                job->needVs.get(), job->needPs.get(), job->desc.fastLink)); });
                         } catch (const std::exception& e) { LOG_WARNING("renderer: pipeline worker: {}", e.what()); }
                     }
                     // Before FinishJob: the render thread may take the pipeline right after.
@@ -8664,13 +8664,31 @@ void main()
                 return desc;
             }
 
+            // Diagnostic (LO_NAK_ATTRIBUTE=1, with NAK_DEBUG=print): builds guest
+            // pipelines one at a time between marker lines on stderr, so the NAK
+            // statistics printed in between belong to this vs/ps pair.
+            template <typename Create>
+            static auto NakAttributed(const PipelineKey& key, Create&& create)
+            {
+                static const bool enabled = getenv("LO_NAK_ATTRIBUTE") != nullptr;
+                if (!enabled) return create();
+                static std::mutex mutex;
+                std::lock_guard lock(mutex);
+                std::fprintf(stderr, "nak-begin vs=%016llx ps=%016llx
+", (unsigned long long)key.vs, (unsigned long long)key.ps);
+                auto result = create();
+                std::fprintf(stderr, "nak-end vs=%016llx ps=%016llx
+", (unsigned long long)key.vs, (unsigned long long)key.ps);
+                return result;
+            }
+
             std::unique_ptr<RenderPipeline> CreatePipeline(const PipelineKey& key, Shader* vs, Shader* ps, bool trace, bool fastLink = false)
             {
                 if (nativeVulkan && key.prim == 1 && vs && vs->shader && vk_object_trace::Permit())
                     std::fprintf(stderr, "VK_OBJECT_TRACE route=renderer event=point_pipeline vs_hash=0x%llx module=0x%llx uses_point_size_metadata=%u color_mask=%u depth_format=%u\n",
                         vk_object_trace::Id(key.vs), vk_object_trace::Id(static_cast<const VulkanShader*>(vs->shader.get())->vk),
                         unsigned(vs->info.usesPointSize), key.colorMask, key.depthFormat);
-                return device->createGraphicsPipeline(DescribeForCreation(key, vs, ps, trace, fastLink));
+                return NakAttributed(key, [&] { return device->createGraphicsPipeline(DescribeForCreation(key, vs, ps, trace, fastLink)); });
             }
             RenderGraphicsPipelineDesc DescribePipeline(const PipelineKey& key, Shader* vs, Shader* ps, bool trace)
             {
