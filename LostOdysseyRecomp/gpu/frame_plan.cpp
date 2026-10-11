@@ -114,6 +114,9 @@ namespace gpu::frame_plan
         // Diagnostic: "set internal_resolution <height>" over the Switch network log.
         if (const int height = os::netlog::Switch("internal_resolution"); height >= 360 && height <= 720)
             config.internalResolution = height;
+        // "set scaling_quality 1|2" (bilinear|bicubic).
+        if (const int quality = os::netlog::Switch("scaling_quality"); quality == 1 || quality == 2)
+            config.scalingQuality = uint32_t(quality - 1);
         static const bool readback = getenv("LO_RESOLVE_READBACK") != nullptr;
         static const bool dlssInputProbe = [] { const char* value = getenv("LO_DLSS_INPUT_PROBE"); return value && std::string_view(value) == "1"; }();
         const resolution::Size drawableSize{uint32_t(extent >> 32), uint32_t(extent)};

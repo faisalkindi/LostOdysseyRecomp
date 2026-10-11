@@ -1038,9 +1038,40 @@ namespace gpu::video
         // The presentation fence completed. FG inputs recorded into that batch
         // retire here; every wait that clears g_presentPending must call this,
         // or the next FG recording would find its previous lease still open.
+        // Diagnostic (LO_PRESENT_GPU_TIMING=1): GPU timestamps at the start and end
+        // of the presentation batch, logged with absolute times once its fence
+        // completes, to line up with the renderer's "gpu batch timeline".
+        std::unique_ptr<plume::RenderQueryPool> g_presentTimer;
+        bool g_presentTimerPending = false;
+        bool PresentGpuTiming()
+        {
+            static const bool enabled = getenv("LO_PRESENT_GPU_TIMING") != nullptr;
+            return enabled;
+        }
+        void BeginPresentTimer(plume::RenderCommandList* list)
+        {
+            if (!PresentGpuTiming() || !g_device) return;
+            if (!g_presentTimer) g_presentTimer = g_device->createQueryPool(2);
+            if (!g_presentTimer) return;
+            list->resetQueryPool(g_presentTimer.get(), 0, 2);
+            list->writeTimestamp(g_presentTimer.get(), 0);
+        }
+        void EndPresentTimer(plume::RenderCommandList* list)
+        {
+            if (!PresentGpuTiming() || !g_presentTimer) return;
+            list->writeTimestamp(g_presentTimer.get(), 1);
+            g_presentTimerPending = true;
+        }
+
         void PresentationFenceCompleted()
         {
             g_presentPending = false;
+            if (g_presentTimerPending && g_presentTimer) {
+                g_presentTimerPending = false;
+                g_presentTimer->queryResults();
+                if (const uint64_t* t = g_presentTimer->getResults())
+                    LOG_INFO("present gpu timeline begin_ns={} end_ns={} gpu_ms={:.3f}", t[0], t[1], double(t[1] - t[0]) / 1e6);
+            }
 #if defined(LO_ENABLE_VULKAN_FSR_FG) && defined(_WIN32)
             if (g_fsrVulkanFg) g_fsrVulkanFg->AfterHostDrain();
 #endif
@@ -4649,6 +4680,7 @@ namespace gpu::video
                         id.allocation, id.generation, fgHandoff.packet->producer->producerSerial, fgHandoff.packet->resolveSerial);
                 }
                 if (!BeginGpuCommands(g_commandList.get())) return;
+                BeginPresentTimer(g_commandList.get());
                 if (sceneCopySource) RecordSceneCopy(sceneCopySource);
 #if defined(LO_ENABLE_D3D12_FG) && defined(_WIN32)
                 if (g_d3dFg && g_d3dFg->Enabled()) {
@@ -4745,6 +4777,7 @@ namespace gpu::video
 #endif
                 g_captureCopy.d3dFenceValue = d3dSignal;
                 PreparePresentImage(backBuffer);
+                EndPresentTimer(g_commandList.get());
                 if (!EndGpuCommands(g_commandList.get())) return;
 
                 const plume::RenderCommandList* lists[] = { g_commandList.get() };

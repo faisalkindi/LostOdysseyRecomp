@@ -4656,6 +4656,9 @@ void main()
                     const auto* results = s.timingQueries->getResults();
                     if (results) gpuTiming.AddBatch(results[0], results[1]);
                     else gpuTiming.AddUnavailableBatch();
+                    // Diagnostic: absolute GPU times, to line up with "present gpu timeline".
+                    if (results && render_timing::Enabled())
+                        LOG_INFO("gpu batch timeline read_frame={} begin_ns={} end_ns={}", frame, results[0], results[1]);
                 } else if (render_timing::Enabled()) gpuTiming.AddUnavailableBatch();
                 s.drawProbe.ReadCompleted();
 #if defined(LO_GPU_PLUME)
