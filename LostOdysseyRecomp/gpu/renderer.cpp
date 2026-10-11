@@ -8668,17 +8668,15 @@ void main()
             // pipelines one at a time between marker lines on stderr, so the NAK
             // statistics printed in between belong to this vs/ps pair.
             template <typename Create>
-            static auto NakAttributed(const PipelineKey& key, Create&& create)
+            static std::unique_ptr<RenderPipeline> NakAttributed(const PipelineKey& key, Create&& create)
             {
                 static const bool enabled = getenv("LO_NAK_ATTRIBUTE") != nullptr;
                 if (!enabled) return create();
                 static std::mutex mutex;
                 std::lock_guard lock(mutex);
-                std::fprintf(stderr, "nak-begin vs=%016llx ps=%016llx
-", (unsigned long long)key.vs, (unsigned long long)key.ps);
+                std::fprintf(stderr, "nak-begin vs=%016llx ps=%016llx\n", (unsigned long long)key.vs, (unsigned long long)key.ps);
                 auto result = create();
-                std::fprintf(stderr, "nak-end vs=%016llx ps=%016llx
-", (unsigned long long)key.vs, (unsigned long long)key.ps);
+                std::fprintf(stderr, "nak-end vs=%016llx ps=%016llx\n", (unsigned long long)key.vs, (unsigned long long)key.ps);
                 return result;
             }
 
