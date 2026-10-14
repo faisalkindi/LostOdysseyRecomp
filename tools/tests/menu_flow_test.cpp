@@ -849,8 +849,8 @@ void CheckBr03DlssMenu(uint8_t* base)
     saveState("13-color-unsupported.bmp");
     {
         // Menus, pause and the title screen draw no scene, so the newest frame
-        // reports NoEligibleScene. The row describes the last frame of the
-        // request that had one (PlannerObservation::eligible).
+        // reports NoEligibleScene. The row describes the request's submitted
+        // frame, or its last scene fallback when none (PlannerObservation::eligible).
         const auto previousExecution = running.execution;
         auto menuFrame = SubmittedObservation(DlssQuality::Quality, 1707, 960, 2560, 1440);
         menuFrame.outcome = gpu::frame_plan::DlssExecutionOutcome::Fallback;
@@ -879,13 +879,13 @@ void CheckBr03DlssMenu(uint8_t* base)
         gpu::frame_plan::menuFlowEligible = stalled;
         show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::NoEligibleScene);
         Require(settings::snapshot.notice == L"Color conditions do not support DLSS.",
-                "a fallback in the last game frame is shown, not masked");
+                "a request that never submitted shows its last scene fallback");
         saveState("14-menu-after-fallback.bmp");
         stalled.reason = DlssEffectReason::UnsupportedProjection;
         gpu::frame_plan::menuFlowEligible = stalled;
         show(DlssEffectPhase::TemporaryFallback, DlssEffectReason::NoEligibleScene);
         Require(settings::snapshot.notice == L"DLSS is not running. Normal rendering is used for now.",
-                "an unnamed fallback in the last game frame still says DLSS is not running");
+                "an unnamed scene fallback still says DLSS is not running");
         auto otherRequest = SubmittedObservation(DlssQuality::Quality, 1707, 960, 2560, 1440);
         otherRequest.plan.requestSignature = 77;
         gpu::frame_plan::menuFlowEligible = otherRequest;

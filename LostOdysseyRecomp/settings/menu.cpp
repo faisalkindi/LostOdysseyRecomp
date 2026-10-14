@@ -954,8 +954,8 @@ const wchar_t* FsrFallbackSentence(gpu::frame_plan::DlssEffectReason reason)
 // the CPU plan. Submitted means that output was accepted for submission. It does
 // not mean the GPU finished, the image was presented, or the whole frame used DLSS.
 // Active without an execution record stays on the waiting sentence. While the
-// newest frame has no scene, the last frame of the same request that had one
-// is described; a failure classified from the snapshot still comes first.
+// newest frame has no scene, StatusExecution of the same request is described;
+// a failure classified from the snapshot still comes first.
 // An unsaved Off, quality, or backend edit is only a following note.
 std::wstring DlssNotice()
 {
@@ -1028,7 +1028,8 @@ std::wstring DlssNotice()
         return xess ? WithProvider(std::move(fsrText), name) : fsrText;
     }
     // The menu itself covers the scene, so its frames report NoEligibleScene.
-    // Describe the last frame of this request that had a scene instead.
+    // Describe a submitted frame of this request instead, or the reason of its
+    // last frame with a scene when none was submitted.
     const bool sceneless = running.phase == gpu::frame_plan::DlssEffectPhase::TemporaryFallback &&
         running.reason == gpu::frame_plan::DlssEffectReason::NoEligibleScene;
     const bool lastScene = sceneless && execution && gpu::frame_plan::SceneEligible(*execution) &&

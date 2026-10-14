@@ -212,12 +212,13 @@ namespace gpu::frame_plan
         std::optional<PlanFailure> latched;
         std::optional<FailureReason> persistentFailure;
         std::optional<DlssExecutionObservation> execution;
-        // The last SceneEligible execution of the same request.
+        // SceneEligible execution of the same request: a submitted one if any,
+        // otherwise the last fallback.
         std::optional<DlssExecutionObservation> eligible;
     };
     // The execution a settings status line describes. The settings menu covers
-    // the scene, so its own frames have none; it reads the last frame of this
-    // request that had one. Before any, the newest (NoEligibleScene) stays.
+    // the scene, so its own frames have none; it reads the request's eligible
+    // execution instead. Before any, the newest (NoEligibleScene) stays.
     inline std::optional<DlssExecutionObservation> StatusExecution(const PlannerObservation& observed)
     {
         return observed.execution && !SceneEligible(*observed.execution) && observed.eligible ?
@@ -411,9 +412,14 @@ namespace gpu::frame_plan
                 observation.actualProvider != plan.requestedUpscaler) return false;
             if (execution_ && observation.renderFrame <= execution_->renderFrame) return false;
             execution_ = observation;
-            // Within one request only the outcome and reason can change.
-            if (SceneEligible(observation) && (!eligible_ || eligible_->outcome != observation.outcome ||
-                eligible_->reason != observation.reason))
+            // Stored only when it changes; within one request only the outcome
+            // and reason can. A submitted frame stays once there is one: frame
+            // fallbacks are per frame (opening the camp menu blurs the scene for
+            // a frame), and failures that stop a request are latched and
+            // reported ahead of any execution.
+            if (SceneEligible(observation) && (!eligible_ ||
+                (eligible_->outcome != DlssExecutionOutcome::Submitted &&
+                 (eligible_->outcome != observation.outcome || eligible_->reason != observation.reason))))
                 eligible_ = observation;
             return true;
         }
