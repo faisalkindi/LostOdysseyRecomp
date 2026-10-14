@@ -154,7 +154,7 @@ namespace gpu::dred
             if (++unfinished > 8) continue;
             std::string ops;
             const uint32_t first = done > 4 ? done - 4 : 0;
-            const uint32_t last = std::min(total, done + 5);
+            const uint32_t last = (std::min)(total, done + 5);
             for (uint32_t i = first; i < last && node->pCommandHistory; ++i)
             {
                 if (total - i > kRing) continue;
