@@ -19,6 +19,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Mods that replace models or text no longer rebuild their game files after every game update, only after an update that changes how mods are applied.
 - A game folder moved or copied after importing the discs finds them again instead of asking to import them a second time.
 - Windows: when Mod Organizer 2 starts the game from a folder without imported discs, the importer says so, so you can point MO2 at your game folder instead of importing a second copy.
+- TAA and the upscalers keep tracking moving characters and objects after you travel to another area; before, they could lose track of them until you went back, and the image was less stable.
 
 ### 简体中文
 
@@ -33,6 +34,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 替换模型或文本的 Mod 不再在每次游戏更新后重建游戏文件，只在更新改变了 Mod 的处理方式时才重建。
 - 导入光盘后移动或复制过的游戏文件夹能找到已导入的光盘，不再要求重新导入。
 - Windows：Mod Organizer 2 从没有导入光盘的文件夹启动游戏时，导入器会提示这一点；把 MO2 指向你的游戏文件夹即可，不必再导入一份。
+- 前往其他区域后，TAA 和超分会继续跟踪移动的角色和物体；之前它们可能一直跟丢，直到回到原来的区域，画面也因此不够稳定。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
 
