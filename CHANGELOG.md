@@ -25,6 +25,11 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The DLSS 5 neural rendering page says when `nvngx_dlssnr.dll` is missing or the GPU cannot run it, instead of asking you to play a scene. It also says the game does not include that file.
 - Performance overlay: the bar across the top shows the frame generation frame rate with DLSS frame generation on Vulkan too.
 - TAA and the upscalers keep tracking moving characters and objects after you travel to another area; before, they could lose track of them until you went back, and the image was less stable.
+- Settings help text is readable again: lines that had shrunk to small print, such as DLSS 5 neural rendering, VSync and HDR, are shorter in every menu language; the neural rendering page's missing-DLL message wraps instead of shrinking.
+- Model mods are no longer limited to 4 GB per disc.
+- Settings → Graphics: new rows open the DLSS 5 neural rendering tuning page with its preview and the HDR calibration page, so you no longer need to know that Confirm on the setting opens them. Brightness, Controls, Mods and Achievements show the same open button.
+- When a sound frame cannot be decoded, the log now says why (#524).
+- Windows, Direct3D 12: with Settings → System → Debug log on, the log records what the graphics card was doing when it stops responding. It takes effect at the next launch and costs a few percent of GPU time (#524).
 - TAA and the upscalers (DLSS, FSR, XeSS) take less CPU and GPU time; in Uhra the frame rate is about 8% higher.
 
 ### 简体中文
@@ -46,6 +51,11 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - DLSS 5 神经渲染调整页在缺少 `nvngx_dlssnr.dll` 或显卡无法运行时会直接说明，不再提示进入游戏场景，并说明游戏不附带该文件。
 - 性能信息：Vulkan 下开启 DLSS 帧生成时，顶部信息栏也会显示帧生成后的帧率。
 - 前往其他区域后，TAA 和超分会继续跟踪移动的角色和物体；之前它们可能一直跟丢，直到回到原来的区域，画面也因此不够稳定。
+- 设置的说明文字恢复正常大小：DLSS 5 神经渲染、垂直同步、HDR 等缩成小字的说明在所有菜单语言中都已缩短，神经渲染调整页缺少 DLL 的提示改为换行显示，不再缩小。
+- 模型 Mod 不再受每张光盘 4 GB 的限制。
+- 设置 → 图像：新增“神经渲染调整与预览”和“HDR 校准”两行，直接打开对应页面，不必再知道在设置项上按确认才能进入。亮度、按键设置、Mod 和成就也显示同样的打开按钮。
+- 声音帧无法解码时，日志会写明原因（#524）。
+- Windows Direct3D 12：打开“设置 → 系统 → 调试日志”后，显卡停止响应时日志会记下它当时在做什么。下次启动时生效，会多占几个百分点的 GPU 时间（#524）。
 - TAA 和超分（DLSS、FSR、XeSS）占用的 CPU 和 GPU 时间更少；在乌拉，帧率约提高 8%。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14

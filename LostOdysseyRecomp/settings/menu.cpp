@@ -563,7 +563,7 @@ std::pair<std::wstring, std::wstring> ModsHelp(const mods_page::Rows &rows)
     std::wstring help;
     if (!mods_page::IsMod(modsEntries[size_t(index)]))
         help = !problem.empty() ? Tr(L"Problem: ", L"問題：") + problem
-                                : Tr(L"A language pack. Choose it in System → Game language.",
+                                : Tr(L"This is a language pack. Choose it in System → Game language.",
                                      L"語言包。請在 系統 → 遊戲語言 中選擇。");
     else if (info.apiVersion == 0)
         help = Tr(L"Not loaded: ", L"未載入：") + problem;
@@ -704,9 +704,9 @@ std::pair<std::wstring, std::wstring> ControlsHelp()
     if (controlsFocus == ControlsSaveRow)
         return {Tr(L"Saves the buttons and keys. They apply at once.", L"儲存按鍵配置，立即套用。"), page};
     if (input >= 0)
-        return {keyboard ? Tr(L"Confirm, then press the key for this input. A key already in use swaps places.",
+        return {keyboard ? Tr(L"Confirm, then press the key for this input. Any key already in use swaps places.",
                               L"確認後，按下要用於此項的鍵盤按鍵。已使用的按鍵會互換。")
-                         : Tr(L"Confirm, then press the controller button for this input. A button already in use swaps places.",
+                         : Tr(L"Confirm, then press the controller button for this input. Any button already in use swaps places.",
                               L"確認後，按下要用於此項的控制器按鍵。已使用的按鍵會互換。"),
                 page};
     return {{}, page};
@@ -808,6 +808,15 @@ const wchar_t *VoiceName(uint8_t *base, uint32_t index)
     const auto language = VoiceLanguage(base, index);
     return language >= 1 && language < std::size(names) ? names[language] : L"Unknown";
 }
+// The status line is one line in a small box: a space after a Latin stop,
+// none after a full-width one.
+void AppendSentence(std::wstring &text, std::wstring_view sentence)
+{
+    while (!sentence.empty() && sentence.front() == L' ') sentence.remove_prefix(1);
+    if (sentence.empty()) return;
+    if (!text.empty() && !text.ends_with(L'。')) text += L' ';
+    text += sentence;
+}
 std::wstring ExecutionSizeSuffix(const gpu::frame_plan::FramePlan &plan)
 {
     if (!plan.width || !plan.height || !plan.output.width || !plan.output.height)
@@ -838,15 +847,15 @@ const wchar_t *ReasonSentence(gpu::frame_plan::DlssEffectReason reason)
     case DlssEffectReason::AwaitingGpuFrame:
         return Tr(L"Waiting for the first DLSS result.", L"正在等待第一次 DLSS 結果。");
     case DlssEffectReason::DeviceNotReady:
-        return Tr(L"DLSS is waiting for the graphics device. Normal rendering is used for now.",
-                  L"DLSS 正在等待圖形裝置。目前先使用常規渲染。");
+        return Tr(L"DLSS is waiting for the graphics device.",
+                  L"DLSS 正在等待圖形裝置。");
     case DlssEffectReason::NeedsVulkanRestart:
         return Tr(L"DLSS needs Vulkan and a restart.", L"DLSS 需要 Vulkan，並在重新啟動後才會使用。");
     case DlssEffectReason::CapabilityUnavailable:
         return Tr(L"DLSS is not available on this device.", L"這台裝置無法使用 DLSS。");
     case DlssEffectReason::SizingPending:
-        return Tr(L"DLSS is querying the render resolution. Normal rendering is used for now.",
-                  L"DLSS 正在查詢渲染解析度。目前先使用常規渲染。");
+        return Tr(L"DLSS is querying the render resolution.",
+                  L"DLSS 正在查詢渲染解析度。");
     case DlssEffectReason::SizingUnavailable:
         return Tr(L"Render resolution is unavailable.", L"渲染解析度無法使用。");
     case DlssEffectReason::SizingError:
@@ -862,8 +871,8 @@ const wchar_t *ReasonSentence(gpu::frame_plan::DlssEffectReason reason)
     case DlssEffectReason::PromotionUnavailable:
         return Tr(L"DLSS output was not adopted.", L"未能採用 DLSS 輸出。");
     case DlssEffectReason::RequestFailure:
-        return Tr(L"DLSS request failed and fell back. No automatic retry.",
-                  L"DLSS 請求失敗並已回退，不會自動重試。");
+        return Tr(L"DLSS request failed; no automatic retry.",
+                  L"DLSS 請求失敗，不會自動重試。");
     case DlssEffectReason::GpuWorkStopped:
         return Tr(L"GPU work has stopped.", L"GPU 工作已停止。");
     case DlssEffectReason::NoEligibleScene: // NotStartedSentence
@@ -895,8 +904,8 @@ const wchar_t *PhaseSentence(gpu::frame_plan::DlssEffectPhase phase)
     case DlssEffectPhase::DeviceUnavailable:
         return ReasonSentence(DlssEffectReason::CapabilityUnavailable);
     case DlssEffectPhase::TemporaryFallback:
-        return Tr(L"DLSS is not running. Normal rendering is used for now.",
-                  L"DLSS 沒有在執行。目前先使用常規渲染。");
+        return Tr(L"DLSS is not running for now.",
+                  L"DLSS 暫時沒有執行。");
     case DlssEffectPhase::Inactive:
     case DlssEffectPhase::Active:
         break;
@@ -905,21 +914,23 @@ const wchar_t *PhaseSentence(gpu::frame_plan::DlssEffectPhase phase)
 }
 std::wstring SubmittedSentence(const gpu::frame_plan::DlssExecutionObservation &execution)
 {
-    return std::wstring(SubmittedModeSentence(execution.plan.dlssQuality)) + ExecutionSizeSuffix(execution.plan);
+    std::wstring text = SubmittedModeSentence(execution.plan.dlssQuality);
+    AppendSentence(text, ExecutionSizeSuffix(execution.plan));
+    return text;
 }
 const wchar_t *BackendPendingSentence(gpu::backend::Backend backend)
 {
     if (backend == gpu::backend::Backend::Vulkan)
-        return Tr(L"Still using Vulkan until restart. DLSS is checked after restart.",
-                  L"重新啟動前仍使用 Vulkan。DLSS 會在重新啟動後再確認。");
+        return Tr(L"Still on Vulkan until restart.",
+                  L"重新啟動前仍使用 Vulkan。");
     if (backend == gpu::backend::Backend::D3D11)
-        return Tr(L"Still using Direct3D 11 until restart. DLSS is checked after restart.",
-                  L"重新啟動前仍使用 Direct3D 11。DLSS 會在重新啟動後再確認。");
+        return Tr(L"Still on Direct3D 11 until restart.",
+                  L"重新啟動前仍使用 Direct3D 11。");
     if (backend == gpu::backend::Backend::D3D12)
-        return Tr(L"Still using Direct3D 12 until restart. DLSS is checked after restart.",
-                  L"重新啟動前仍使用 Direct3D 12。DLSS 會在重新啟動後再確認。");
-    return Tr(L"Graphics backend change is not applied. DLSS is checked after restart.",
-              L"圖形後端變更尚未套用。DLSS 會在重新啟動後再確認。");
+        return Tr(L"Still on Direct3D 12 until restart.",
+                  L"重新啟動前仍使用 Direct3D 12。");
+    return Tr(L"The backend change applies after restart.",
+              L"圖形後端變更會在重新啟動後套用。");
 }
 // XeSS shares the FSR status sentences and their translations; only the
 // provider name differs.
@@ -936,8 +947,8 @@ const wchar_t* FsrFallbackSentence(gpu::frame_plan::DlssEffectReason reason)
     case DlssEffectReason::NoEligibleScene:
         return NotStartedSentence();
     case DlssEffectReason::UnknownColorEncoding:
-        return Tr(L"FSR: scene color source is not verified. Normal rendering is used for this frame.",
-                  L"FSR：場景色彩來源尚未確認，這一幀使用常規渲染。");
+        return Tr(L"FSR: scene color unverified; normal rendering.",
+                  L"FSR：場景色彩未確認，使用常規渲染。");
     case DlssEffectReason::MotionPipelinePending:
         return Tr(L"FSR: motion data is still being prepared.", L"FSR：正在準備運動資料。");
     case DlssEffectReason::FeatureReconfigurePending:
@@ -945,13 +956,13 @@ const wchar_t* FsrFallbackSentence(gpu::frame_plan::DlssEffectReason reason)
     case DlssEffectReason::PromotionUnavailable:
         return Tr(L"FSR: output was not adopted this frame.", L"FSR：這一幀未能採用輸出。");
     case DlssEffectReason::RequestFailure:
-        return Tr(L"FSR request failed. Change the upscaler setting or restart to retry.",
-                  L"FSR 請求失敗。請變更縮放設定或重新啟動後重試。");
+        return Tr(L"FSR failed. Change the upscaler or restart to retry.",
+                  L"FSR 失敗。請變更縮放設定或重新啟動後重試。");
     case DlssEffectReason::GpuWorkStopped:
         return Tr(L"FSR: GPU work has stopped. Restart is required.", L"FSR：GPU 工作已停止，需要重新啟動。");
     default:
-        return Tr(L"FSR has not submitted output for the current request. Normal rendering is in use.",
-                  L"FSR 目前的請求尚無已提交輸出，正在使用常規渲染。");
+        return Tr(L"FSR has no output yet; normal rendering for now.",
+                  L"FSR 尚無輸出，目前使用常規渲染。");
     }
 }
 // The first sentence is the classified result. Active with an execution record
@@ -978,19 +989,20 @@ std::wstring DlssNotice()
         else if (!running.device.metalFxAvailable)
             text = Tr(L"MetalFX Temporal is unavailable on this Mac.", L"這台 Mac 無法使用 MetalFX Temporal。");
         else if (running.hasPlan && running.failure)
-            text = Tr(L"MetalFX request failed. Change the upscaler setting or restart to retry.",
-                      L"MetalFX 請求失敗。請變更縮放設定或重新啟動後重試。");
+            text = Tr(L"MetalFX failed. Change the upscaler or restart to retry.",
+                      L"MetalFX 失敗。請變更縮放設定或重新啟動後重試。");
         else if (matchingExecution && execution->submissionSerial &&
             execution->outcome == gpu::frame_plan::DlssExecutionOutcome::Submitted) {
             const wchar_t* modes[] = {Tr(L"Quality", L"品質"), Tr(L"Balanced", L"平衡"), Tr(L"Performance", L"效能"), L"Native AA"};
             text = std::wstring(L"MetalFX ") + modes[uint32_t(gpu::upscaling::NormalizeFsrQuality(execution->plan.fsrQuality))] +
-                Tr(L" output submitted.", L" 輸出已提交。") + ExecutionSizeSuffix(execution->plan);
+                Tr(L" output submitted.", L" 輸出已提交。");
+            AppendSentence(text, ExecutionSizeSuffix(execution->plan));
         } else if (matchingExecution && gpu::frame_plan::SceneEligible(*execution))
             text = WithProvider(FsrFallbackSentence(execution->reason), L"MetalFX");
         else
             text = NotStartedSentence();
         if (edit.upscaler != gpu::upscaling::Upscaler::MetalFx)
-            text += Tr(L" The selected upscaler is not applied yet.", L" 選取的縮放技術尚未套用。");
+            AppendSentence(text, Tr(L" The new upscaler is not applied yet.", L" 新的縮放技術尚未套用。"));
         return text;
     }
     for (const auto provider : {gpu::upscaling::Upscaler::Fsr, gpu::upscaling::Upscaler::Xess}) {
@@ -1019,17 +1031,18 @@ std::wstring DlssNotice()
             execution->outcome == gpu::frame_plan::DlssExecutionOutcome::Submitted) {
             const wchar_t* modes[] = {Tr(L"Quality", L"品質"), Tr(L"Balanced", L"平衡"), Tr(L"Performance", L"效能"), L"Native AA"};
             fsrText = std::wstring(L"FSR ") + modes[uint32_t(gpu::upscaling::NormalizeFsrQuality(execution->plan.fsrQuality))] +
-                Tr(L" output submitted.", L" 輸出已提交。") + ExecutionSizeSuffix(execution->plan);
+                Tr(L" output submitted.", L" 輸出已提交。");
+            AppendSentence(fsrText, ExecutionSizeSuffix(execution->plan));
             if (edit.upscaler == provider && edit.fsrQuality != execution->plan.fsrQuality)
-                fsrText += Tr(L" The selected FSR quality is not applied yet.", L" 選取的 FSR 品質尚未套用。");
+                AppendSentence(fsrText, Tr(L" The new quality is not applied yet.", L" 新的品質尚未套用。"));
         } else {
             fsrText = FsrFallbackSentence(matchingExecution ? execution->reason :
                 gpu::frame_plan::DlssEffectReason::AwaitingGpuFrame);
         }
         if (edit.graphicsBackend != running.device.backend)
-            fsrText += Tr(L" The selected graphics backend applies after restart.", L" 選取的圖形後端會在重新啟動後套用。");
+            AppendSentence(fsrText, Tr(L" The backend change applies after restart.", L" 圖形後端變更會在重新啟動後套用。"));
         if (edit.upscaler != provider)
-            fsrText += Tr(L" The selected upscaler is not applied yet.", L" 選取的縮放技術尚未套用。");
+            AppendSentence(fsrText, Tr(L" The new upscaler is not applied yet.", L" 新的縮放技術尚未套用。"));
         return xess ? WithProvider(std::move(fsrText), name) : fsrText;
     }
     // The menu itself covers the scene, so its frames report NoEligibleScene.
@@ -1075,20 +1088,23 @@ std::wstring DlssNotice()
     else if (runningDlss)
         appliedQuality = gpu::upscaling::NormalizeDlssQuality(running.plannedQuality);
     if (runningDlss && edit.upscaler != gpu::upscaling::Upscaler::Dlss)
-        text += std::wstring(L" ") + (edit.upscaler == gpu::upscaling::Upscaler::Fsr ? Tr(L"The FSR choice is not applied yet.", L"FSR 選項尚未套用。") :
+        AppendSentence(text, edit.upscaler == gpu::upscaling::Upscaler::Fsr ? Tr(L"The FSR choice is not applied yet.", L"FSR 選項尚未套用。") :
             edit.upscaler == gpu::upscaling::Upscaler::Xess ? WithProvider(Tr(L"The FSR choice is not applied yet.", L"FSR 選項尚未套用。"), L"XeSS") :
             Tr(L"The Off choice is not applied yet.", L"關閉選項尚未套用。"));
     else if (!runningDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss && !backendPending)
-        text += std::wstring(L" ") + Tr(L"The DLSS choice is not applied yet.", L"DLSS 選項尚未套用。");
+        AppendSentence(text, Tr(L"The DLSS choice is not applied yet.", L"DLSS 選項尚未套用。"));
     else if (runningDlss && edit.upscaler == gpu::upscaling::Upscaler::Dlss && appliedQuality &&
              gpu::upscaling::NormalizeDlssQuality(edit.dlssQuality) != *appliedQuality)
-        text += std::wstring(L" ") + Tr(L"The selected DLSS quality is not applied yet.", L"選取的 DLSS 品質尚未套用。");
+        AppendSentence(text, Tr(L"The new quality is not applied yet.", L"新的品質尚未套用。"));
     if (backendPending)
-        text += std::wstring(L" ") + BackendPendingSentence(running.device.backend);
+        AppendSentence(text, BackendPendingSentence(running.device.backend));
     return text;
 }
 bool GraphicsRowHidden(int r)
 {
+    // A page entry row shows with the setting it belongs to.
+    if (r == int(GraphicsRow::NeuralRenderingTuning)) r = int(GraphicsRow::DlssNeuralRendering);
+    if (r == int(GraphicsRow::HdrCalibration)) r = int(GraphicsRow::HdrPeak);
 #if LO_PLATFORM_ANDROID
     // Android owns the native surface; the renderer derives aspect from its drawable.
     // NGX and frame generation have no Android providers in this build.
@@ -1160,7 +1176,7 @@ std::wstring FgNotice()
         text = Tr(L"Frame generation is off.", L"影格生成已關閉。"); break;
     }
     if (running.environmentOverride)
-        text += Tr(L" A diagnostic override controls FG.", L" 影格生成由診斷覆寫控制。");
+        text += Tr(L" The diagnostic override controls FG.", L" 影格生成由診斷覆寫控制。");
     return text;
 }
 static_assert(int(GraphicsRow::Save) + 1 == int(GraphicsRow::Count));
@@ -1201,6 +1217,7 @@ void Publish(uint8_t *base, uint32_t config)
     next.brightness = MakeBrightnessCalibration(edit, brightnessOpen.load());
     next.neuralRendering = MakeNeuralRenderingTuning(edit, nrOpen.load());
     const uint32_t flags = PPC_LOAD_U32(config + 4);
+    next.confirmB = (flags & 0x02000000) != 0;
     auto makeChoices = [&](const wchar_t *en, const wchar_t *zh, std::vector<std::wstring> choices,
                            uint32_t selected, bool enabled = true) {
         selected = choices.empty() ? 0 : std::min(selected, uint32_t(choices.size() - 1));
@@ -1329,6 +1346,7 @@ void Publish(uint8_t *base, uint32_t config)
                    (flags & 0x02000000) ? 1 : 0);
         next.rows.back().controllerButtons = true;
         addAction(L"Controls", L"按鍵設定", Tr(L"Open", L"開啟"));
+        next.rows.back().pageEntry = true;
         addAction(L"Restore game defaults", L"恢復遊戲預設設定", Tr(L"Restore", L"恢復"));
         addAction(L"Quit to Main Menu", L"退出到主選單", Tr(L"Return", L"返回"));
         for (int i = 0; i < GameRowCount; ++i)
@@ -1457,6 +1475,9 @@ void Publish(uint8_t *base, uint32_t config)
                    std::min(edit.dlssNeuralRendering, DlssNeuralRenderingMaxPasses));
         neuralRendering.hidden = GraphicsRowHidden(int(GraphicsRow::DlssNeuralRendering));
         placeGraphics(GraphicsRow::DlssNeuralRendering, std::move(neuralRendering));
+        auto nrTuning = makeChoices(L"NR tuning & preview", L"神經渲染調整與預覽", {Tr(L"Open", L"開啟")}, 0);
+        nrTuning.pageEntry = true;
+        placeGraphics(GraphicsRow::NeuralRenderingTuning, std::move(nrTuning));
         const uint32_t afChoice = edit.anisotropicFiltering == 16 ? 4 : edit.anisotropicFiltering == 8 ? 3 :
                                   edit.anisotropicFiltering == 4 ? 2 : edit.anisotropicFiltering == 2 ? 1 : 0;
         placeGraphics(GraphicsRow::AnisotropicFiltering, makeChoices(L"Anisotropic filtering", L"各向異性過濾",
@@ -1534,8 +1555,13 @@ void Publish(uint8_t *base, uint32_t config)
         placeGraphics(GraphicsRow::HdrPeak,
             Row{Tr(L"HDR peak brightness", L"HDR 最高亮度"), peakValue, hdrAvailable,
                 {L"◀", peakValue, L"▶"}, 1});
-        placeGraphics(GraphicsRow::Brightness, makeChoices(L"Brightness / Gamma", L"亮度 / Gamma",
-                   {BrightnessValue(edit.displayBrightness) + L" · " + GammaValue(edit.displayGamma)}, 0));
+        auto calibration = makeChoices(L"HDR calibration", L"HDR 校準", {Tr(L"Open", L"開啟")}, 0, hdrAvailable);
+        calibration.pageEntry = true;
+        placeGraphics(GraphicsRow::HdrCalibration, std::move(calibration));
+        auto brightness = makeChoices(L"Brightness / Gamma", L"亮度 / Gamma",
+                   {BrightnessValue(edit.displayBrightness) + L" · " + GammaValue(edit.displayGamma)}, 0);
+        brightness.pageEntry = true;
+        placeGraphics(GraphicsRow::Brightness, std::move(brightness));
         placeGraphics(GraphicsRow::Save, makeChoices(L"Save graphics settings", L"儲存圖形設定", {Tr(L"Save", L"儲存")}, 0));
     }
     else
@@ -1552,11 +1578,13 @@ void Publish(uint8_t *base, uint32_t config)
         addChoices(L"Debug log", L"除錯日誌", onOff(), edit.debugLog ? 0 : 1);
         if (achievementSummary.empty()) RefreshAchievementSummary();
         addAction(L"Achievements", L"成就", achievementSummary.c_str());
+        next.rows.back().pageEntry = true;
         const bool logUpload = os::log_collection::Supported();
         next.rows.push_back({os::log_collection::Label(edit.uiLanguage),
             !logUpload ? Tr(L"Windows only", L"僅限 Windows") : os::log_collection::Enabled() ? Tr(L"On", L"開") : Tr(L"Off", L"關"),
             logUpload, {}, 0});
         addAction(L"Mods", L"Mod", Tr(L"Open", L"開啟"));
+        next.rows.back().pageEntry = true;
         addAction(L"Import discs & DLC", L"匯入光碟與 DLC", Tr(L"Open", L"開啟"));
         addAction(L"Shader bundle", L"著色器包", Tr(L"Download again", L"重新下載"));
         addAction(L"Save settings", L"儲存設定", Tr(L"Save", L"儲存"));
@@ -1590,8 +1618,8 @@ void Publish(uint8_t *base, uint32_t config)
                        L"按鍵提示、震動，以及控制器與鍵盤的按鍵配置。");
     if (tab == 3 && row == SystemGameLanguageRow)
         next.help = !edit.gameLanguagePack.empty()
-            ? Tr(L"A language pack from the mods folder. Voices and the rest stay in the language it is based on. Takes effect after restarting.",
-                 L"來自 mods 資料夾的語言包。語音等其餘內容沿用它所基於的語言。重新啟動後生效。")
+            ? Tr(L"Language pack from the mods folder. Voices and the rest stay in its base language. Applies after restarting.",
+                 L"來自 mods 資料夾的語言包。語音等其餘內容沿用其基礎語言。重新啟動後生效。")
             : Tr(L"Game language takes effect after restarting. Requires matching language assets.",
                  L"遊戲語言重新啟動後生效，需要對應語言資源。中文遊戲文本需要亞洲版資源。");
     if (tab == 3 && row == SystemDebugLogRow)
@@ -1610,26 +1638,26 @@ void Publish(uint8_t *base, uint32_t config)
         next.help = Tr(L"Downloads the shader bundle for your renderer again at the next start, even if one is installed.",
                        L"下次啟動時重新下載目前渲染器的著色器包，即使已經安裝。");
     if (tab == 1 && row == AudioVoiceVolumeRow && status.empty())
-        next.help = Tr(L"Spoken dialogue in cutscenes, set apart from Sound effects. Voices in battle follow Sound effects. Applies from the next scene.",
-                       L"過場動畫中的對白音量，與音效音量分開。戰鬥中的語音仍跟隨音效音量。從下一個場景起套用。");
+        next.help = Tr(L"Cutscene dialogue volume. Voices in battle follow Sound effects. Applies from the next scene.",
+                       L"過場動畫中的對白音量。戰鬥中的語音跟隨音效音量。從下一個場景起套用。");
     if (tab == 1 && row == AudioOutputRow && status.empty())
         next.help = edit.audioOutput == AudioOutputMatrix
-            ? Tr(L"Encodes 5.1 into stereo for an AV receiver's Pro Logic II, Dolby Surround or Neural:X mode; plays as stereo elsewhere. Applies immediately.",
-                 L"把 5.1 編入立體聲，供 AV 擴大機的 Pro Logic II、Dolby Surround 或 Neural:X 模式還原；其他裝置照常播放立體聲。立即套用。")
+            ? Tr(L"Encodes 5.1 into stereo for Pro Logic II, Dolby Surround or Neural:X receivers. Applies at once.",
+                 L"5.1 編入立體聲，供 Pro Logic II、Dolby Surround 或 Neural:X 擴大機還原；其他為立體聲。立即套用。")
             : edit.audioOutput == AudioOutputSurround && apu::OutputChannels() == 2
 #ifdef _WIN32
             // The speaker layout is only in the classic Sound control panel.
-            ? Tr(L"Windows reports a stereo device. Open Control Panel → Sound → Playback, select the device, click Configure and choose 5.1 or 7.1 Surround, then select 5.1 again.",
-                 L"Windows 將此裝置視為立體聲。開啟 控制台 → 音效 → 播放，選取裝置，按「設定」並選擇 5.1 或 7.1 環繞，再重新選擇 5.1。")
+            ? Tr(L"Windows sees a stereo device. In Control Panel → Sound → Playback → Configure, pick 5.1 or 7.1, then 5.1 here.",
+                 L"Windows 視此裝置為立體聲。在 控制台 → 音效 → 播放 → 設定 選 5.1 或 7.1，再於此選 5.1。")
 #else
-            ? Tr(L"The output device is not set to 5.1, so the stereo mix is in use. Set the system speakers to 5.1 or 7.1 and select 5.1 again.",
-                 L"輸出裝置未設定為 5.1，正在使用立體聲混音。請將系統喇叭設定為 5.1 或 7.1 後重新選擇 5.1。")
+            ? Tr(L"The device is not set to 5.1, so stereo is used. Set the system speakers to 5.1 or 7.1, then select 5.1 again.",
+                 L"裝置未設定為 5.1，正在使用立體聲。請將系統喇叭設為 5.1 或 7.1，再重新選擇 5.1。")
 #endif
             : Tr(L"5.1 sends the game's surround mix to a 5.1 or 7.1 speaker setup. Applies immediately.",
                  L"5.1 會將遊戲的環繞聲混音輸出到 5.1 或 7.1 喇叭，立即套用。");
     if (tab == 1 && row == AudioRearAngleRow && status.empty())
         next.help = edit.audioOutput == AudioOutputMatrix
-            ? Tr(L"A test sound circles the speakers. Sets where the rear channels sound; 110° is the Pro Logic II standard.",
+            ? Tr(L"The test sound circles the speakers. Sets where the rear channels sound; 110° is the Pro Logic II standard.",
                  L"測試聲音會繞著喇叭轉圈。設定後方聲道的位置；110° 為 Pro Logic II 標準。")
             : Tr(L"Select Matrix surround in Audio output to adjust this.",
                  L"在音訊輸出選擇矩陣環繞聲後才能調整。");
@@ -1660,8 +1688,8 @@ void Publish(uint8_t *base, uint32_t config)
                            L"儲存後將遊戲視窗移到這台顯示器，全螢幕也會使用它。自動則讓視窗留在原處。");
             break;
         case GraphicsRow::AspectRatio:
-            next.help = Tr(L"Auto fills the window. 16:9, 21:9 and 4:3 keep that shape with black bars; frame generation is off while bars show. Applies immediately after saving.",
-                           L"自動會填滿視窗。16:9、21:9 與 4:3 保持該比例並加上黑邊；有黑邊時影格生成關閉。儲存後立即套用。");
+            next.help = Tr(L"Auto fills the window. 16:9, 21:9 and 4:3 add black bars, and frame generation is off while they show. Applies on saving.",
+                           L"自動會填滿視窗。16:9、21:9 與 4:3 會加上黑邊，有黑邊時影格生成關閉。儲存後套用。");
             break;
         case GraphicsRow::OutputResolution:
             next.help = Tr(L"Sets the output size. Fullscreen uses the desktop size.",
@@ -1669,14 +1697,14 @@ void Publish(uint8_t *base, uint32_t config)
             break;
         case GraphicsRow::RenderResolution:
 #if LO_PLATFORM_MACOS
-            next.help = Tr(L"Scene resolution before scaling. Follow output uses the window size in points; Native uses every Retina pixel (4x the work).",
-                           L"縮放前的場景解析度。跟隨輸出使用視窗的點尺寸；原生使用全部 Retina 像素（4 倍工作量）。");
+            next.help = Tr(L"Scene resolution before scaling. Follow output uses window points; Native, every Retina pixel (4x work).",
+                           L"縮放前的場景解析度。跟隨輸出使用視窗點尺寸；原生使用全部 Retina 像素（4 倍工作量）。");
 #else
-            next.help = Tr(L"Scene resolution before scaling to the output. Follow output matches the output size.",
-                           L"縮放至輸出前的場景解析度。跟隨輸出與輸出尺寸相同。");
+            next.help = Tr(L"Scene resolution before scaling. Follow output matches the output size.",
+                           L"縮放前的場景解析度。跟隨輸出與輸出尺寸相同。");
 #endif
-            next.help += Tr(L" With an upscaler, a value above the output supersamples: the upscaler outputs at it and the image is scaled down.",
-                            L" 開啟縮放器時，高於輸出的值會超取樣：縮放器以此解析度輸出，再縮小顯示。");
+            next.help += Tr(L" An upscaler supersamples above it.",
+                            L"開啟縮放器時，高於輸出即為超取樣。");
             break;
         case GraphicsRow::ShadowResolution:
             next.help = Tr(L"Shadow-map resolution multiplier. Higher values need more GPU memory and rendering time. Applies after saving.",
@@ -1722,8 +1750,8 @@ void Publish(uint8_t *base, uint32_t config)
                            L"效能、平衡、品質或 DLAA。狀態列顯示已提交的模式。");
             break;
         case GraphicsRow::DlssModel:
-            next.help = Tr(L"M: steadier and sharper than older DLSS models at a moderate cost. L: the steadiest image with the least ghosting, but slower, especially on RTX 20 and 30 series.",
-                           L"M：比舊版 DLSS 模型更穩定、更清晰，開銷適中。L：畫面最穩定、拖影最少，但較慢，在 RTX 20/30 系列顯示卡上尤其明顯。");
+            next.help = Tr(L"M: steadier and sharper than older models, moderate cost. L: steadiest, least ghosting, but slower, mainly on RTX 20 and 30.",
+                           L"M：比舊版模型更穩定、更清晰，開銷適中。L：最穩定、拖影最少，但較慢，RTX 20/30 系列尤其明顯。");
             break;
         case GraphicsRow::FsrSharpness:
             next.help = Tr(L"FSR sharpening: Off disables RCAS; 1-100% sets sharpening strength.",
@@ -1731,19 +1759,25 @@ void Publish(uint8_t *base, uint32_t config)
             break;
         case GraphicsRow::DlssNeuralRendering:
         {
-            next.help = Tr(L"NVIDIA's DLSS 5 neural rendering on the DLSS image. 1×-4× runs it that many times: stronger, but each pass costs frame rate. Needs an RTX GPU and nvngx_dlssnr.dll next to the game (not included). Applies after saving.",
-                           L"在 DLSS 畫面上執行 NVIDIA 的 DLSS 5 神經渲染。1×-4× 為執行次數：次數越多效果越強，但每次都會降低影格率。需要 RTX 顯示卡，並將 nvngx_dlssnr.dll 放在遊戲旁（不隨附）。儲存後套用。");
-            next.help = next.help + L" " + Tr(L"Confirm opens the tuning page.", L"按確認開啟調整頁面。");
+            next.help = Tr(L"More passes: stronger but slower. Needs an RTX GPU and nvngx_dlssnr.dll (not included). Confirm: tuning page.",
+                           L"次數越多效果越強，但會降低影格率。需要 RTX 顯示卡與 nvngx_dlssnr.dll（不隨附）。確認：調整頁面。");
+            // The Graphics help shares its box with the upscaler status, so the
+            // line is small already; the NR status must fit on it as well.
             using gpu::dlss::NeuralRenderingState;
             const auto state = gpu::dlss::g_neuralRenderingState.load(std::memory_order_relaxed);
             const wchar_t *status =
                 state == NeuralRenderingState::Active ? Tr(L"Running.", L"執行中。") :
-                state == NeuralRenderingState::MissingRuntime ? Tr(L"nvngx_dlssnr.dll is missing or unusable. The game does not include it.", L"找不到 nvngx_dlssnr.dll 或無法使用。遊戲不附帶該檔案。") :
-                state == NeuralRenderingState::Unsupported ? Tr(L"This GPU or driver cannot run it.", L"此顯示卡或驅動程式無法執行。") :
-                state == NeuralRenderingState::Failed ? Tr(L"It stopped after an error; see the log.", L"發生錯誤後已停止，請查看記錄檔。") : nullptr;
-            if (status) next.help = next.help + L" " + status;
+                state == NeuralRenderingState::MissingRuntime ? Tr(L"DLL not found.", L"找不到 DLL。") :
+                state == NeuralRenderingState::Unsupported ? Tr(L"Not supported.", L"此顯示卡或驅動程式不支援。") :
+                state == NeuralRenderingState::Failed ? Tr(L"Stopped after an error.", L"發生錯誤後已停止。") : nullptr;
+            // A full-width stop needs no space before the next sentence.
+            if (status) next.help = next.help + (next.help.ends_with(L'。') ? L"" : L" ") + status;
             break;
         }
+        case GraphicsRow::NeuralRenderingTuning:
+            next.help = Tr(L"Tune the model and compare DLSS with DLSS + NR in a live preview.",
+                           L"調整模型，並在即時預覽中比較 DLSS 與 DLSS + NR。");
+            break;
         case GraphicsRow::AnisotropicFiltering:
             next.help = Tr(L"Improves texture clarity at oblique viewing angles. Changes apply immediately after saving.",
                            L"提升斜角觀看時的紋理清晰度。儲存後立即套用。");
@@ -1761,8 +1795,8 @@ void Publish(uint8_t *base, uint32_t config)
                            L"遊戲在鏡頭與角色快速移動時的模糊。關閉後移動畫面保持清晰。儲存後立即套用。");
             break;
         case GraphicsRow::Culling:
-            next.help = Tr(L"How soon the game stops drawing characters and objects at the screen edges. 100% is the original; lower keeps them until they are fully off screen but costs frame rate, higher hides them sooner. Applies immediately after saving.",
-                           L"遊戲在畫面邊緣停止繪製角色與物件的時機。100% 為原版；數值越低越晚隱藏，直到完全離開畫面，但會降低影格率；數值越高越早隱藏。儲存後立即套用。");
+            next.help = Tr(L"How soon characters and objects at screen edges stop being drawn. 100% is original; lower costs frame rate, higher hides them sooner.",
+                           L"畫面邊緣的角色與物件何時停止繪製。100% 為原版；越低越耗影格率，越高越早隱藏。");
             break;
         case GraphicsRow::ScalingQuality:
 #if LO_PLATFORM_MACOS
@@ -1786,16 +1820,16 @@ void Publish(uint8_t *base, uint32_t config)
             break;
         case GraphicsRow::VariableRefreshRate:
 #if LO_PLATFORM_MACOS
-            next.help = Tr(L"Shows each frame for one game frame so ProMotion and adaptive-sync displays follow the game's frame rate. Display sync stays on.",
+            next.help = Tr(L"Shows each frame for one game frame, so ProMotion and adaptive-sync displays follow the game's frame rate. Display sync stays on.",
                            L"每個影格至少顯示一個遊戲影格的時間，讓 ProMotion 與自適應同步螢幕跟隨遊戲影格率；顯示同步保持開啟。");
 #else
-            next.help = Tr(L"Off: each frame shows as soon as it is ready, with the lowest latency, but the picture can tear. On: frames wait for the display to refresh, without tearing. FreeSync / G-SYNC Compatible: for adaptive-sync displays; turn it on in the display and driver too. Applies immediately after saving.",
-                           L"關：畫面完成即顯示，延遲最低，但可能出現畫面撕裂。開：等待螢幕刷新再顯示，不會撕裂。FreeSync / G-SYNC Compatible：適用於自適應同步螢幕，需同時在螢幕與驅動程式中啟用。儲存後立即套用。");
+            next.help = Tr(L"Off: lowest latency, may tear. On: no tearing. FreeSync / G-SYNC Compatible: adaptive sync; turn it on in the display and driver too.",
+                           L"關：延遲最低，但可能撕裂。開：不會撕裂。FreeSync / G-SYNC Compatible：自適應同步螢幕用，需在螢幕與驅動程式中啟用。");
 #endif
             break;
         case GraphicsRow::PerformanceOverlay:
-            next.help = Tr(L"FPS shows the frame rate in the top-left corner. Detailed adds a bar across the top with the upscaler and its resolution, frame generation, and CPU and GPU load. Applies immediately after saving.",
-                           L"FPS 會在左上角顯示影格率。詳細會在畫面頂端加上一列資訊，包含縮放器與其解析度、影格生成，以及 CPU 與 GPU 負載。儲存後立即套用。");
+            next.help = Tr(L"FPS: the frame rate at the top left. Detailed: a top bar with the upscaler and its resolution, frame generation, and CPU and GPU load.",
+                           L"FPS：左上角顯示影格率。詳細：頂端資訊列，含縮放器與解析度、影格生成、CPU 與 GPU 負載。");
             break;
         case GraphicsRow::FrameGeneration:
         case GraphicsRow::FrameGenerationMultiplier:
@@ -1839,8 +1873,8 @@ void Publish(uint8_t *base, uint32_t config)
         }
         case GraphicsRow::Hdr:
             next.help = graphics_menu::HdrAvailable(edit.graphicsBackend)
-                ? Tr(L"Requires an HDR display. Applies after saving; with frame generation on, after a restart. Works with every AA mode, upscaler and scaling filter; frame generation stays SDR except DLSS on Vulkan.",
-                     L"需要 HDR 螢幕。儲存後套用；開啟影格生成時需重新啟動。可搭配任一抗鋸齒、超解析度與縮放濾鏡；影格生成僅 Vulkan 的 DLSS 可與 HDR 同時開啟。")
+                ? Tr(L"Requires an HDR display. Applies on saving; with frame generation on, after a restart. Frame generation stays SDR except DLSS on Vulkan.",
+                     L"需要 HDR 螢幕。儲存後套用；開啟影格生成時需重新啟動。影格生成僅 Vulkan 的 DLSS 可保持 HDR。")
                 : Tr(L"HDR output is unavailable for this graphics backend.",
                      L"目前圖形後端無法使用 HDR 輸出。");
             break;
@@ -1856,6 +1890,13 @@ void Publish(uint8_t *base, uint32_t config)
         case GraphicsRow::HdrPeak:
             next.help = Tr(L"Press A to calibrate peak brightness against an HDR comparison pattern. Auto follows the active display report.",
                            L"按 A 以 HDR 對比圖校準最高亮度；自動模式跟隨目前顯示器的回報值。");
+            break;
+        case GraphicsRow::HdrCalibration:
+            next.help = graphics_menu::HdrAvailable(edit.graphicsBackend)
+                ? Tr(L"Set peak brightness against an HDR test pattern or the current scene.",
+                     L"以 HDR 測試圖案或目前場景校準最高亮度。")
+                : Tr(L"HDR output is unavailable for this graphics backend.",
+                     L"目前圖形後端無法使用 HDR 輸出。");
             break;
         case GraphicsRow::Brightness:
             next.help = Tr(L"Adjusts the game image's brightness and gamma. Press A to compare against the current scene. Changes apply after saving.",
@@ -1994,7 +2035,7 @@ void Publish(uint8_t *base, uint32_t config)
         next.dialogMessage == snapshot.dialogMessage && next.dialogChoices == snapshot.dialogChoices &&
         next.dialogSelection == snapshot.dialogSelection && next.speakerLayout == snapshot.speakerLayout &&
         next.speakerRear == snapshot.speakerRear && next.pageTitle == snapshot.pageTitle &&
-        next.keyLegend == snapshot.keyLegend && next.reorder == snapshot.reorder)
+        next.keyLegend == snapshot.keyLegend && next.reorder == snapshot.reorder && next.confirmB == snapshot.confirmB)
         return;
     next.revision = snapshot.revision + 1;
     snapshot = std::move(next);
@@ -3665,6 +3706,8 @@ PPC_FUNC(sub_822F19B0)
                         int(edit.hdrPaperWhiteNits), 10000));
                 }
                 break;
+            case GraphicsRow::NeuralRenderingTuning:
+            case GraphicsRow::HdrCalibration:
             case GraphicsRow::Brightness:
             case GraphicsRow::Save:
             case GraphicsRow::Count:
@@ -3727,7 +3770,8 @@ PPC_FUNC(sub_822F19B0)
         shaderBundleChoice = 1;
         status.clear();
     }
-    if ((input & 0x1000) && tab == 2 && row == int(GraphicsRow::HdrPeak) &&
+    if ((input & 0x1000) && tab == 2 &&
+        (row == int(GraphicsRow::HdrPeak) || row == int(GraphicsRow::HdrCalibration)) &&
         graphics_menu::HdrAvailable(edit.graphicsBackend))
     {
         calibrationStartAutomatic = edit.hdrPeakAutomatic;
@@ -3827,7 +3871,8 @@ PPC_FUNC(sub_822F19B0)
         Publish(base, config);
         return;
     }
-    if ((input & 0x1000) && !(input & 0x2000) && tab == 2 && row == int(GraphicsRow::DlssNeuralRendering) &&
+    if ((input & 0x1000) && !(input & 0x2000) && tab == 2 &&
+        (row == int(GraphicsRow::DlssNeuralRendering) || row == int(GraphicsRow::NeuralRenderingTuning)) &&
         !GraphicsRowHidden(row))
     {
         nrStart = edit;
