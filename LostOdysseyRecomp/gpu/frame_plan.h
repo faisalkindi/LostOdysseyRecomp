@@ -199,13 +199,30 @@ namespace gpu::frame_plan
         upscaling::Upscaler actualProvider = upscaling::Upscaler::Dlss;
     };
     using UpscalerExecutionObservation = DlssExecutionObservation; // Source compatibility for the existing NGX status fixtures.
+    // A frame that had a scene to upscale: submitted, or fallen back for a
+    // reason other than having no scene (menus, pause, title, loading).
+    inline bool SceneEligible(const DlssExecutionObservation& observation)
+    {
+        return observation.outcome == DlssExecutionOutcome::Submitted ||
+            observation.reason != DlssEffectReason::NoEligibleScene;
+    }
     struct PlannerObservation {
         bool hasPlan = false;
         FramePlan plan{};
         std::optional<PlanFailure> latched;
         std::optional<FailureReason> persistentFailure;
         std::optional<DlssExecutionObservation> execution;
+        // The last SceneEligible execution of the same request.
+        std::optional<DlssExecutionObservation> eligible;
     };
+    // The execution a settings status line describes. The settings menu covers
+    // the scene, so its own frames have none; it reads the last frame of this
+    // request that had one. Before any, the newest (NoEligibleScene) stays.
+    inline std::optional<DlssExecutionObservation> StatusExecution(const PlannerObservation& observed)
+    {
+        return observed.execution && !SceneEligible(*observed.execution) && observed.eligible ?
+            observed.eligible : observed.execution;
+    }
     class PlannerState {
     public:
         FramePlan Begin(PlannerInput input) {
@@ -325,7 +342,10 @@ namespace gpu::frame_plan
                     execution_->plan.requestSignature == p.requestSignature &&
                     execution_->plan.geometryEpoch == p.geometryEpoch &&
                     execution_->plan.requestedUpscaler == p.requestedUpscaler;
-                if (!sameExecution) execution_.reset();
+                if (!sameExecution) {
+                    execution_.reset();
+                    eligible_.reset();
+                }
             }
             if (!upscaling::IsDlssConsumer(p.consumer) && !upscaling::IsSrConsumer(p.consumer)) legacy_.plan = p;
             lastFinal_ = p;
@@ -352,6 +372,7 @@ namespace gpu::frame_plan
             if (dlssDisabled_ && lastFinal_ && dlssDisabled_->signature == lastFinal_->requestSignature)
                 observed.persistentFailure = dlssDisabled_->reason;
             observed.execution = execution_;
+            observed.eligible = eligible_;
             return observed;
         }
         bool ReportFailure(const PlanFailure& failure)
@@ -390,6 +411,10 @@ namespace gpu::frame_plan
                 observation.actualProvider != plan.requestedUpscaler) return false;
             if (execution_ && observation.renderFrame <= execution_->renderFrame) return false;
             execution_ = observation;
+            // Within one request only the outcome and reason can change.
+            if (SceneEligible(observation) && (!eligible_ || eligible_->outcome != observation.outcome ||
+                eligible_->reason != observation.reason))
+                eligible_ = observation;
             return true;
         }
     private:
@@ -414,6 +439,8 @@ namespace gpu::frame_plan
         size_t nextAttempt_ = 0;
         std::optional<FramePlan> lastFinal_;
         std::optional<DlssExecutionObservation> execution_;
+        // Reset with execution_ when the request changes.
+        std::optional<DlssExecutionObservation> eligible_;
     };
 
     // Active is only a matching submitted DLSS SR frame. The appended values
@@ -743,6 +770,8 @@ namespace gpu::frame_plan
     DlssEffectSnapshot CurrentDlssEffect();
     void ReportDlssExecution(const DlssExecutionObservation& observation);
     void ReportUpscalerExecution(const UpscalerExecutionObservation& observation);
+    // StatusExecution of the current request on this device, for the settings
+    // menu. The runtime log keeps the newest execution through CurrentDlssEffect.
     std::optional<UpscalerExecutionObservation> CurrentUpscalerExecution();
     // One classified snapshot after a device publish. Not a per-frame hook.
     void NoteCurrentDlssStatus();
