@@ -486,6 +486,8 @@ public:
     bool AbortedThisFrame() const { return aborted_; }
     // Finish gave skipped camera-static draws the camera's motion this frame.
     bool CameraFrameThisFrame() const { return cameraFrame_; }
+    // The camera passes could not be built on this device.
+    bool CameraUnavailable() const { return cameraInitAttempted_ && !(cameraMaskPipeline_ && cameraFillPipeline_); }
     bool ResourceFailedThisFrame() const { return resourceFailedThisFrame_; }
     const std::string& LastError() const { return error_; }
     enum class PipelinePrepareStatus : uint8_t { Ready, Pending, Failed };

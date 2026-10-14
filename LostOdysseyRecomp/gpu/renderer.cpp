@@ -1094,7 +1094,12 @@ namespace gpu::renderer
                 uint32_t preAnchorCount = 0, untrackedDepth = 0;
                 bool preAnchorOverflow = false;
                 int8_t allowed = -1; // decided at the first tracked draw
-                bool unsafe = false, previousUnsafe = false;
+                bool unsafe = false;
+                // Skipping waits this long after a frame that could not give the
+                // skipped draws camera motion, and stops for good if the camera
+                // passes cannot be built on this device.
+                uint64_t holdUntil = 0;
+                bool disabled = false;
                 uint32_t skipped = 0, markers = 0;
                 float jx = 0, jy = 0;
                 // The last frame whose scene camera HistoryOwner keeps as the next
@@ -1102,15 +1107,26 @@ namespace gpu::renderer
                 uint64_t keptFrame = ~0ull, keptEpoch = 0;
                 std::array<uint32_t, 16> keptVp{};
                 uint64_t camerasApplied = 0, camerasDropped = 0;
+                void Hold(uint64_t f) { holdUntil = std::max(holdUntil, f + 60); }
                 void Begin(uint64_t f) {
                     if (frame == f) return;
-                    previousUnsafe = frame + 1 == f && unsafe;
+                    if (unsafe) Hold(frame);
                     frame = f; preAnchorCount = untrackedDepth = skipped = markers = 0;
                     preAnchorOverflow = unsafe = false; allowed = -1; jx = jy = 0;
                 }
                 bool PreAnchorWrote(uint64_t allocation) const {
                     return preAnchorOverflow || std::find(preAnchorDepth.begin(), preAnchorDepth.begin() + preAnchorCount, allocation) !=
                         preAnchorDepth.begin() + preAnchorCount;
+                }
+                // Depth written outside motion tracking (a draw, clear or fill).
+                void NoteUntrackedDepth(uint64_t f, uint64_t allocation, bool sceneCameraKnown, uint64_t sceneAllocation) {
+                    Begin(f);
+                    if (sceneCameraKnown) {
+                        if (allocation == sceneAllocation) { ++untrackedDepth; unsafe = true; }
+                    } else if (!PreAnchorWrote(allocation)) {
+                        if (preAnchorCount < preAnchorDepth.size()) preAnchorDepth[preAnchorCount++] = allocation;
+                        else preAnchorOverflow = true;
+                    }
                 }
             } cameraStatic;
             uint64_t mvScratchBytes = 0;
@@ -1373,7 +1389,7 @@ namespace gpu::renderer
                 auto& s = cameraStatic;
                 s.Begin(frame);
                 if (s.allowed < 0)
-                    s.allowed = motionOptions.staticSkip && sceneCamera && !s.previousUnsafe &&
+                    s.allowed = motionOptions.staticSkip && !s.disabled && frame >= s.holdUntil && sceneCamera &&
                         s.keptFrame + 1 == frame && s.keptEpoch == temporalEpoch &&
                         !s.PreAnchorWrote(sceneCamera->depthAllocation);
                 return s.allowed > 0 && !s.unsafe;
@@ -1417,6 +1433,13 @@ namespace gpu::renderer
                     motionView = motionReplay->Finish(commandList, history->CurrentDepth(), flags, history->ResetInitializationRequired(),
                         camera ? &*camera : nullptr);
                     if (motionView.ready) history->RecordExternalRead();
+                    if (cameraStatic.frame == frame && cameraStatic.skipped && motionView.ready && !motionReplay->CameraFrameThisFrame()) {
+                        cameraStatic.Hold(frame);
+                        if (motionReplay->CameraUnavailable() && !cameraStatic.disabled) {
+                            cameraStatic.disabled = true;
+                            LOG_WARNING("mv: camera motion passes unavailable; every draw replays: {}", motionReplay->LastError());
+                        }
+                    }
                 }
                 // This frame's scene camera is the next frame's previous camera.
                 if (history->CurrentCameraForCapture() && temporalScene.Draws()) {
@@ -5350,6 +5373,12 @@ void main()
 
             void QueueClear(HostTexture& tex, pending_clear::Op op)
             {
+                // A depth fill leaves a surface no replay draws; the clear value 0 is "nothing".
+                if (motionOptions.staticSkip && IsDepthTarget(tex) && (op.aspects & pending_clear::Depth) && op.depth != 0.0f) {
+                    const bool sceneCameraKnown = temporalScene.Frame() == frame && temporalScene.Draws() != 0;
+                    cameraStatic.NoteUntrackedDepth(frame, tex.allocationSerial, sceneCameraKnown,
+                        sceneCameraKnown ? temporalScene.Anchor().depthAllocation : 0);
+                }
                 MarkFgWritable(tex, "edram_clear");
                 if (tex.pendingClear.Size() >= pending_clear::Queue::kMaxOps) RunPendingClears(tex);
                 tex.pendingClear.Record(std::move(op), tex.width, tex.height);
@@ -9962,18 +9991,9 @@ void main()
                 // to the camera-static class: block skipping before the scene camera,
                 // or invalidate this frame's skipped pixels after it.
                 if (motionOptions.staticSkip && temporalActive && depth && (depthControl & 6) == 6 &&
-                    (!motionDepthWrite || motionLocallyMaskedClipWriter)) {
-                    cameraStatic.Begin(frame);
-                    if (temporalScene.Draws()) {
-                        if (depth->allocationSerial == temporalScene.Anchor().depthAllocation) {
-                            ++cameraStatic.untrackedDepth; cameraStatic.unsafe = true;
-                        }
-                    } else if (!cameraStatic.PreAnchorWrote(depth->allocationSerial)) {
-                        if (cameraStatic.preAnchorCount < cameraStatic.preAnchorDepth.size())
-                            cameraStatic.preAnchorDepth[cameraStatic.preAnchorCount++] = depth->allocationSerial;
-                        else cameraStatic.preAnchorOverflow = true;
-                    }
-                }
+                    (!motionDepthWrite || motionLocallyMaskedClipWriter))
+                    cameraStatic.NoteUntrackedDepth(frame, depth->allocationSerial, temporalScene.Draws() != 0,
+                        temporalScene.Draws() ? temporalScene.Anchor().depthAllocation : 0);
                 // Save only the words jitter can change. Collect copies the FULL
                 // VS bank once and restores this proven matrix window in its arena.
                 std::array<uint32_t, 16> motionOriginalVP;
