@@ -4,6 +4,18 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 按新到旧记录简短更新，日期采用 UTC。技术验证见[开发状态](docs/STATUS.md)，后续计划见[路线图](docs/ROADMAP.zh-CN.md)。
 
+## Unreleased
+
+### English
+
+- Android: the sound comes back after you switch to another app or turn the screen off and return to the game (#491).
+- Android: returning to the game from another app or the lock screen leaves black blocks over characters and scenery less often (#492).
+
+### 简体中文
+
+- Android：切到其他应用或关屏后再回到游戏，声音会恢复（#491）。
+- Android：从其他应用或锁屏回到游戏后，角色和场景上出现黑块的情况减少（#492）。
+
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
 
 ### English
