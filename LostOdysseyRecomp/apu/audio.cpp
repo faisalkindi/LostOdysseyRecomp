@@ -156,11 +156,15 @@ namespace apu
         {
             auto resumed = g_resumedAt.load(std::memory_order_relaxed);
             if (!resumed) return;
-            const auto stalled = std::chrono::steady_clock::now().time_since_epoch() -
-                std::chrono::steady_clock::duration(resumed);
-            if (stalled < kResumeDrainTimeout || !g_resumedAt.compare_exchange_strong(resumed, 0)) return;
+            const auto now = std::chrono::steady_clock::now().time_since_epoch();
+            const auto stalled = now - std::chrono::steady_clock::duration(resumed);
+            if (stalled < kResumeDrainTimeout) return;
             std::lock_guard lock(g_deviceMutex);
-            if (g_paused || !g_stream) return; // a paused device keeps its queue
+            if (!g_stream) return;
+            // A paused device keeps its queue; the wait starts over when it plays.
+            if (g_paused) { g_resumedAt.compare_exchange_strong(resumed, now.count()); return; }
+            // Lost to a pause that began meanwhile, or to a newer resume.
+            if (!g_resumedAt.compare_exchange_strong(resumed, 0)) return;
             const uint32_t queued = std::max(0, SDL_GetAudioStreamQueued(g_stream)) / FrameBytes();
             LOG_WARNING("audio: device not draining {} ms after resume (queued {}), reopened",
                 std::chrono::duration_cast<std::chrono::milliseconds>(stalled).count(), queued);
@@ -242,16 +246,19 @@ namespace apu
                     g_outputChannels = g_channels;
 #if LO_PLATFORM_ANDROID
                 auto resumed = g_resumedAt.load(std::memory_order_relaxed);
+                bool waited = false;
 #endif
                 while (QueuedFrames() >= kQueuedFrames)
                 {
                     os::scheduling::PreciseSleepFor(std::chrono::milliseconds(1));
 #if LO_PLATFORM_ANDROID
+                    waited = true;
                     ReopenIfStalledAfterResume();
 #endif
                 }
 #if LO_PLATFORM_ANDROID
-                if (resumed) g_resumedAt.compare_exchange_strong(resumed, 0); // the device drained
+                // A full queue went below the limit: the device takes audio again.
+                if (resumed && waited) g_resumedAt.compare_exchange_strong(resumed, 0);
 #endif
 
                 g_client.Dispatch([&](uint32_t callback, uint32_t param)
