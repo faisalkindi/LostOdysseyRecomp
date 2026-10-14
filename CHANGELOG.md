@@ -19,6 +19,11 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - Mods that replace models or text no longer rebuild their game files after every game update, only after an update that changes how mods are applied.
 - A game folder moved or copied after importing the discs finds them again instead of asking to import them a second time.
 - Windows: when Mod Organizer 2 starts the game from a folder without imported discs, the importer says so, so you can point MO2 at your game folder instead of importing a second copy.
+- Importing the discs stores the archives that are the same on several discs once, about 5.8 GB less for all four discs. For a game folder imported before, start the game once with `--compact-game-data`.
+- Settings → Graphics: the DLSS, FSR, XeSS and MetalFX status line shows the quality and resolution of the last game frame instead of "No eligible scene this frame".
+- Settings → Graphics: a new frame generation multiplier applies as soon as you save, with HDR on too, instead of asking for a restart.
+- The DLSS 5 neural rendering page says when `nvngx_dlssnr.dll` is missing or the GPU cannot run it, instead of asking you to play a scene. It also says the game does not include that file.
+- Performance overlay: the bar across the top shows the frame generation frame rate with DLSS frame generation on Vulkan too.
 - TAA and the upscalers keep tracking moving characters and objects after you travel to another area; before, they could lose track of them until you went back, and the image was less stable.
 
 ### 简体中文
@@ -34,6 +39,11 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 替换模型或文本的 Mod 不再在每次游戏更新后重建游戏文件，只在更新改变了 Mod 的处理方式时才重建。
 - 导入光盘后移动或复制过的游戏文件夹能找到已导入的光盘，不再要求重新导入。
 - Windows：Mod Organizer 2 从没有导入光盘的文件夹启动游戏时，导入器会提示这一点；把 MO2 指向你的游戏文件夹即可，不必再导入一份。
+- 导入光盘时，多张光盘里相同的资源包只存一份，四张光盘约省 5.8 GB。之前导入的游戏目录，用 `--compact-game-data` 启动一次即可。
+- 设置 → 图像：DLSS、FSR、XeSS 和 MetalFX 的状态行显示最后一帧游戏画面的质量和分辨率，不再显示“这一帧没有合格场景”。
+- 设置 → 图像：修改帧生成倍数后保存即生效，开着 HDR 也一样，不再要求重启。
+- DLSS 5 神经渲染调整页在缺少 `nvngx_dlssnr.dll` 或显卡无法运行时会直接说明，不再提示进入游戏场景，并说明游戏不附带该文件。
+- 性能信息：Vulkan 下开启 DLSS 帧生成时，顶部信息栏也会显示帧生成后的帧率。
 - 前往其他区域后，TAA 和超分会继续跟踪移动的角色和物体；之前它们可能一直跟丢，直到回到原来的区域，画面也因此不够稳定。
 
 ## [v0.9.52](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.52) — 2026-10-14
