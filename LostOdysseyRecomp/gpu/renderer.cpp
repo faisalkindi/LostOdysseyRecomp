@@ -1388,8 +1388,10 @@ namespace gpu::renderer
             bool CameraStaticAllowed(const temporal::SceneAnchor* sceneCamera) {
                 auto& s = cameraStatic;
                 s.Begin(frame);
+                // Metal (queued replay draws) has not been checked against a full
+                // replay yet; it keeps replaying every draw.
                 if (s.allowed < 0)
-                    s.allowed = motionOptions.staticSkip && !s.disabled && frame >= s.holdUntil && sceneCamera &&
+                    s.allowed = motionOptions.staticSkip && !video::IsMetal() && !s.disabled && frame >= s.holdUntil && sceneCamera &&
                         s.keptFrame + 1 == frame && s.keptEpoch == temporalEpoch &&
                         !s.PreAnchorWrote(sceneCamera->depthAllocation);
                 return s.allowed > 0 && !s.unsafe;
