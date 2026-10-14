@@ -144,6 +144,60 @@ namespace xenos
             uint32_t loopStartCount = 0;
             uint32_t loopEndCount = 0;
 
+            // Position flow (TranslatedShader::positionConstantSlots): one edge per
+            // assignment, solved without regard to order or paths, so control flow
+            // and register reuse can only add slots. Nodes r0..r63, then these.
+            enum : uint8_t { kFlowPs = 64, kFlowP0, kFlowA0, kFlowPos, kFlowFetchBase, kFlowNone, kFlowNodes };
+            struct FlowEdge
+            {
+                uint8_t dest = kFlowNone;
+                std::array<uint64_t, 2> sources{}; // node bits
+                std::array<uint64_t, 4> constants{};
+                bool relative = false;
+                void Source(uint32_t node) { sources[node >> 6] |= 1ull << (node & 63); }
+            };
+            std::vector<FlowEdge> flowEdges;
+            FlowEdge flowOperands; // op() records every operand it prints here
+            bool flowAllPredicated = false, flowUnknown = false;
+            void FlowEmit(uint32_t dest, bool predicated, FlowEdge edge)
+            {
+                if (dest >= kFlowNone) return;
+                edge.dest = uint8_t(dest);
+                if (predicated) edge.Source(kFlowP0);
+                flowEdges.push_back(edge);
+            }
+            void SolvePositionFlow()
+            {
+                if (isPixelShader || !exportsPosition || flowUnknown) return;
+                struct Deps { std::array<uint64_t, 4> constants{}; bool relative = false; };
+                std::array<Deps, kFlowNodes> deps{};
+                for (bool changed = true; changed;)
+                {
+                    changed = false;
+                    for (const auto& edge : flowEdges)
+                    {
+                        Deps next = deps[edge.dest];
+                        for (size_t i = 0; i < 4; ++i) next.constants[i] |= edge.constants[i];
+                        next.relative |= edge.relative;
+                        auto sources = edge.sources;
+                        if (flowAllPredicated) sources[kFlowP0 >> 6] |= 1ull << (kFlowP0 & 63);
+                        for (uint32_t node = 0; node < kFlowNone; ++node)
+                        {
+                            if (!((sources[node >> 6] >> (node & 63)) & 1)) continue;
+                            for (size_t i = 0; i < 4; ++i) next.constants[i] |= deps[node].constants[i];
+                            next.relative |= deps[node].relative;
+                        }
+                        if (next.constants != deps[edge.dest].constants || next.relative != deps[edge.dest].relative)
+                        {
+                            deps[edge.dest] = next;
+                            changed = true;
+                        }
+                    }
+                }
+                result.positionConstantSlots = deps[kFlowPos].constants;
+                result.positionConstantsKnown = !deps[kFlowPos].relative;
+            }
+
             template<typename... Args>
             void print(fmt::format_string<Args...> f, Args&&... args) { out += fmt::format(f, std::forward<Args>(args)...); }
             template<typename... Args>
@@ -429,6 +483,12 @@ namespace xenos
                 }
 
                 const char* fn = VertexFormatFunction(instr.format);
+                // A full fetch sets the vertex base that mini fetches reuse.
+                FlowEdge fetched;
+                fetched.Source(instr.srcRegister & 63);
+                if (!instr.isMiniFetch) FlowEmit(kFlowFetchBase, instr.isPredicated, fetched);
+                fetched.Source(kFlowFetchBase);
+                FlowEmit(instr.dstRegister & 63, instr.isPredicated, fetched);
                 indent();
                 print("r{}.", instr.dstRegister);
                 printDstSwizzle(instr.dstSwizzle, false);
@@ -469,6 +529,8 @@ namespace xenos
                     return;
                 }
 
+                if (!isPixelShader)
+                    flowUnknown = true;
                 if (instr.isPredicated)
                 {
                     indent();
@@ -603,6 +665,10 @@ namespace xenos
 
                     std::string regFormatted;
                     if (select)
+                        flowOperands.Source(reg & 63);
+                    else
+                        flowOperands.constants[(reg & 0xFF) >> 6] |= 1ull << (reg & 63);
+                    if (select)
                         regFormatted = fmt::format("r{}", reg);
                     else
                     {
@@ -616,7 +682,7 @@ namespace xenos
                         if (srcIndex >= 3 && !instr.src2Select) constSlot = 1;
                         bool relative = constSlot == 0 ? instr.const0Relative : instr.const1Relative;
                         if (relative)
-                            result.usesRelativeConstants = true;
+                            result.usesRelativeConstants = flowOperands.relative = true;
                         if (relative)
                             regFormatted = fmt::format("XeConst({} + {})", reg, instr.constAddressRegisterRelative ? "a0" : "aL");
                         else
@@ -709,15 +775,28 @@ namespace xenos
                     default: setpPushComparison = ">="; break;
                     }
                     indent();
+                    flowOperands = {};
                     // The predicate tests w; the vector result below tests x independently.
                     println("p0 = {} == 0.0 && {} {} 0.0;", op(VECTOR_0, 0b1000),
                         op(VECTOR_1, 0b1000), setpPushComparison);
+                    FlowEmit(kFlowP0, instr.isPredicated, flowOperands);
                 }
                 else if (instr.vectorOpcode == AluVectorOpcode::MaxA)
                 {
                     indent();
+                    flowOperands = {};
                     println("a0 = (int)clamp(floor({} + 0.5), -256.0, 255.0);", op(VECTOR_0, 0b1000));
+                    FlowEmit(kFlowA0, instr.isPredicated, flowOperands);
                 }
+                // Position flow target of the vector and scalar results.
+                uint32_t vectorFlowDest = kFlowNone, scalarFlowDest = kFlowNone;
+                if (!instr.exportData)
+                {
+                    vectorFlowDest = instr.vectorDest & 63;
+                    scalarFlowDest = instr.scalarDest & 63;
+                }
+                else if (!isPixelShader && instr.vectorDest == uint32_t(ExportRegister::VSPosition))
+                    vectorFlowDest = scalarFlowDest = kFlowPos;
 
                 uint32_t vectorWriteMask = instr.vectorWriteMask;
                 if (instr.exportData)
@@ -736,6 +815,9 @@ namespace xenos
                     // results only after computing the scalar operation (Xenia).
                     indent();
                     print("xePV.{} = ", swizzle);
+                    flowOperands = {};
+                    if (instr.vectorOpcode == AluVectorOpcode::Cube)
+                        flowOperands.Source(instr.src1Register & 0x3F);
                     if (instr.vectorSaturate)
                         out += "saturate(";
                     switch (instr.vectorOpcode)
@@ -778,13 +860,17 @@ namespace xenos
                     if (instr.vectorSaturate)
                         out += ')';
                     out += ";\n";
+                    FlowEmit(vectorFlowDest, instr.isPredicated, flowOperands);
                 }
 
+                FlowEdge scalarFlow; // RetainPrev writes the previous ps
+                scalarFlow.Source(kFlowPs);
                 if (instr.scalarOpcode != AluScalarOpcode::RetainPrev)
                 {
                     if (instr.scalarOpcode >= AluScalarOpcode::SetpEq && instr.scalarOpcode <= AluScalarOpcode::SetpRstr)
                     {
                         indent();
+                        flowOperands = {};
                         out += "p0 = ";
                         switch (instr.scalarOpcode)
                         {
@@ -798,9 +884,11 @@ namespace xenos
                         default: print("{} == 0.0", op(SCALAR_0)); break;
                         }
                         out += ";\n";
+                        FlowEmit(kFlowP0, instr.isPredicated, flowOperands);
                     }
 
                     indent();
+                    flowOperands = {};
                     out += "ps = ";
                     if (instr.scalarSaturate)
                         out += "saturate(";
@@ -847,13 +935,29 @@ namespace xenos
                     if (instr.scalarSaturate)
                         out += ')';
                     out += ";\n";
+                    switch (instr.scalarOpcode)
+                    {
+                    case AluScalarOpcode::AddsPrev: case AluScalarOpcode::MulsPrev: case AluScalarOpcode::MulsPrev2:
+                    case AluScalarOpcode::SubsPrev:
+                        flowOperands.Source(kFlowPs); break;
+                    case AluScalarOpcode::SetpEq: case AluScalarOpcode::SetpNe: case AluScalarOpcode::SetpGt:
+                    case AluScalarOpcode::SetpGe: case AluScalarOpcode::SetpPop: case AluScalarOpcode::SetpRstr:
+                        flowOperands.Source(kFlowP0); break;
+                    default:
+                        if (instr.scalarOpcode > AluScalarOpcode::Cos) flowOperands.Source(kFlowPs); // printed as "ps"
+                        break;
+                    }
+                    scalarFlow = flowOperands;
+                    FlowEmit(kFlowPs, instr.isPredicated, scalarFlow);
 
                     switch (instr.scalarOpcode)
                     {
                     case AluScalarOpcode::MaxAs:
-                        indent(); println("a0 = (int)clamp(floor({} + 0.5), -256.0, 255.0);", op(SCALAR_0)); break;
+                        indent(); flowOperands = {}; println("a0 = (int)clamp(floor({} + 0.5), -256.0, 255.0);", op(SCALAR_0));
+                        FlowEmit(kFlowA0, instr.isPredicated, flowOperands); break;
                     case AluScalarOpcode::MaxAsf:
-                        indent(); println("a0 = (int)clamp(floor({}), -256.0, 255.0);", op(SCALAR_0)); break;
+                        indent(); flowOperands = {}; println("a0 = (int)clamp(floor({}), -256.0, 255.0);", op(SCALAR_0));
+                        FlowEmit(kFlowA0, instr.isPredicated, flowOperands); break;
                     default: break;
                     }
                 }
@@ -870,6 +974,7 @@ namespace xenos
                     scalarWriteMask &= ~instr.vectorWriteMask;
                 if (scalarWriteMask != 0)
                 {
+                    FlowEmit(scalarFlowDest, instr.isPredicated, scalarFlow);
                     indent();
                     if (!exportRegister.empty())
                         print("{}.", exportRegister);
@@ -1185,6 +1290,7 @@ namespace xenos
                         case ControlFlowOpcode::CondExecPredEnd:
                         case ControlFlowOpcode::CondExecPredClean:
                         case ControlFlowOpcode::CondExecPredCleanEnd:
+                            flowAllPredicated = true;
                             indent();
                             println("if ({}p0)", cf.condExecPred.condition ? "" : "!");
                             indent(); out += "{\n"; ++indentation; closeBlock = true;
@@ -1213,6 +1319,7 @@ namespace xenos
                             {
                                 if (CanExitInactiveLoop(pc - 1, cf.loopEnd))
                                 {
+                                    flowAllPredicated = true;
                                     indent(); out += "// Inactive loop iterations have no observable effects.\n";
                                     indent(); println("if ({}p0) break;", cf.loopEnd.condition ? "" : "!");
                                 }
@@ -1235,6 +1342,7 @@ namespace xenos
                             else
                             {
                                 indent();
+                                flowAllPredicated |= bool(cf.condJmp.isPredicated);
                                 if (cf.condJmp.isPredicated)
                                     println("if ({}p0)", (cf.condJmp.condition ^ (simpleControlFlow ? 1u : 0u)) ? "" : "!");
                                 else
@@ -1360,6 +1468,7 @@ namespace xenos
                 result.isPixelShader = isPixelShader;
                 Scan();
                 Emit();
+                SolvePositionFlow();
                 // Conditional end blocks use a flag declared up front.
                 out.insert(out.find("\tuint xeVfetchBase = 0u;\n"), "\tbool xeEnd = false;\n");
                 if (isPixelShader)
