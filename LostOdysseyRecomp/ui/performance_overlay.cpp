@@ -2,7 +2,6 @@
 #include "performance_overlay.h"
 #include "text_raster.h"
 #include <gpu/gpu_busy.h>
-#include <host_ui/unifont.h>
 #include <kernel/io/file_system.h>
 #include <settings/config.h>
 #include <settings/menu_assets.h>
@@ -198,8 +197,10 @@ private:
 };
 
 std::u32string Ascii(const std::string& text) { return std::u32string(text.begin(), text.end()); }
+// "1280x720": the body fonts lack ×, and a resolution in the fallback font
+// would not match the other numbers.
 std::u32string Size(uint32_t width, uint32_t height) {
-    return Ascii(std::to_string(width)) + U'×' + Ascii(std::to_string(height));
+    return Ascii(std::to_string(width) + "x" + std::to_string(height));
 }
 
 struct Values {
@@ -239,7 +240,6 @@ public:
         x_ += canvas_.Text(x_, capTop_ - canvas_.CapRows(unitSize_).first, Ascii(text), unitSize_, kUnit);
         x_ += 6 * canvas_.Scale();
     }
-    void Space(double units) { x_ += units * canvas_.Scale(); }
     void Divider() {
         const double s = canvas_.Scale();
         x_ += 4 * s;
