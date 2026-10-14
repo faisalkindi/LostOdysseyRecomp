@@ -1106,6 +1106,7 @@ namespace gpu::renderer
                 // frame's previous camera, and that camera's VP bits.
                 uint64_t keptFrame = ~0ull, keptEpoch = 0;
                 std::array<uint32_t, 16> keptVp{};
+                temporal::Viewport keptViewport{};
                 uint64_t camerasApplied = 0, camerasDropped = 0;
                 void Hold(uint64_t f) { holdUntil = std::max(holdUntil, f + 60); }
                 void Begin(uint64_t f) {
@@ -1393,8 +1394,20 @@ namespace gpu::renderer
                 if (s.allowed < 0)
                     s.allowed = motionOptions.staticSkip && !video::IsMetal() && !s.disabled && frame >= s.holdUntil && sceneCamera &&
                         s.keptFrame + 1 == frame && s.keptEpoch == temporalEpoch &&
-                        !s.PreAnchorWrote(sceneCamera->depthAllocation);
+                        !s.PreAnchorWrote(sceneCamera->depthAllocation) && CameraContinuous(*sceneCamera);
                 return s.allowed > 0 && !s.unsafe;
+            }
+            // A camera cut resets temporal history anyway; near the old camera's
+            // plane its reprojection is also too unstable to stand in for a replay.
+            bool CameraContinuous(const temporal::SceneAnchor& sceneCamera) const {
+                temporal::Matrix current{}, previous{};
+                for (unsigned i = 0; i < 16; ++i) {
+                    current[i] = std::bit_cast<float>(sceneCamera.vpBits[i]);
+                    previous[i] = std::bit_cast<float>(cameraStatic.keptVp[i]);
+                }
+                const auto c = temporal::Camera::Create(current, sceneCamera.viewport);
+                const auto p = temporal::Camera::Create(previous, cameraStatic.keptViewport);
+                return c && p && temporal::ContinuousHistoryCamera(*c, *p);
             }
             // The camera reprojection the skipped draws were classified against:
             // HistoryOwner's current and previous cameras are exactly the scene
@@ -1447,6 +1460,7 @@ namespace gpu::renderer
                 if (history->CurrentCameraForCapture() && temporalScene.Draws()) {
                     cameraStatic.keptFrame = frame; cameraStatic.keptEpoch = temporalEpoch;
                     cameraStatic.keptVp = temporalScene.Anchor().vpBits;
+                    cameraStatic.keptViewport = temporalScene.Anchor().viewport;
                 }
                 if (motionOptions.log) {
                     const auto& st = drawTemporalTracker.Stats();
