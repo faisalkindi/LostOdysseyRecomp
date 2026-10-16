@@ -14,6 +14,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - The black transition after battle now covers the whole screen at 4:3 and ultrawide aspect ratios (#582).
 - Fast-forward keeps the original audio pitch by default; Fast-forward audio → Speed up restores the higher-pitched sound.
 - Areas and battles load faster with a higher frame-rate limit during loading.
+- Language packs for right-to-left languages such as Arabic: text is right-aligned in menus, lists, help bars and dialogue (layout is not mirrored), Arabic joins correctly on the title and pause screens, and Arabic mod names show in the settings menu. Packs can also translate the Thousand Years of Dreams text and the place names (name_data.xmb).
 
 ### 简体中文
 
@@ -23,6 +24,7 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 - 战斗结束后的黑屏过渡会覆盖整个屏幕，包括 4:3 和超宽画面比例（#582）。
 - 快进默认保持声音原有音调；在“变速音频”中选择“随速度升调”可恢复原有的升调效果。
 - 加载地图和战斗时临时提高帧率上限，缩短等待时间。
+- 支持阿拉伯语等从右到左书写的语言包：菜单、列表、帮助栏和对话中的文字右对齐（界面布局不镜像），标题画面和暂停画面的阿拉伯文字母正确连写，设置菜单可显示阿拉伯语的 Mod 名称。语言包还可以翻译“千年之梦”的文字和地名（name_data.xmb）。
 
 ## [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) — 2026-10-15
 
