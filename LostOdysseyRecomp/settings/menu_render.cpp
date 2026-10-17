@@ -142,9 +142,13 @@ namespace
             shaped += wchar_t(kForms[c - 0x0621][0] + form);
         }
 
-        const auto ltr = [](wchar_t c) { return (c < 0x0600 && std::iswalnum(c)) || (c > 0x06FF && c < 0xFB50); };
-        const auto first = std::find_if(shaped.begin(), shaped.end(), [&](wchar_t c) { return arabic(c) || ltr(c); });
-        const bool rtl = first != shaped.end() && arabic(*first);
+        // Digits (Western and Arabic-Indic) read left to right but do not set the line's direction.
+        const auto digit = [](wchar_t c) { return (c >= L'0' && c <= L'9') || (c >= 0x0660 && c <= 0x0669) || (c >= 0x06F0 && c <= 0x06F9); };
+        const auto latin = [](wchar_t c) { return (c < 0x0600 && std::iswalpha(c)) || (c > 0x06FF && c < 0xFB50); };
+        const auto letter = [&](wchar_t c) { return arabic(c) && !digit(c); };
+        const auto ltr = [&](wchar_t c) { return latin(c) || digit(c); };
+        const auto first = std::find_if(shaped.begin(), shaped.end(), [&](wchar_t c) { return letter(c) || latin(c); });
+        const bool rtl = first != shaped.end() && letter(*first);
         const auto reverseRuns = [&](std::wstring &text, auto inRun) {
             for (size_t i = 0; i < text.size();)
             {
@@ -161,7 +165,7 @@ namespace
         };
         if (!rtl)
         {
-            reverseRuns(shaped, arabic);
+            reverseRuns(shaped, letter);
             return shaped;
         }
         std::reverse(shaped.begin(), shaped.end());
@@ -218,13 +222,16 @@ namespace
     }
 
     // Output width of a string in the host font at a glyph scale.
+    // Arabic presentation forms and the tatweel join their neighbours: no pixel between them.
+    bool JoinedForm(wchar_t c) { return c == 0x0640 || (c >= 0xFB50 && c <= 0xFDFF) || (c >= 0xFE70 && c <= 0xFEFC); }
+
     int HostAdvance(const std::wstring &value, float fontScale)
     {
         int width = 0;
         for (wchar_t c : value)
         {
             auto g = host_ui::font::GetGlyph(uint32_t(c));
-            width += int(((c >= 0xe100 && c <= 0xe103) ? 17 : (g.width + 1)) * fontScale);
+            width += int(((c >= 0xe100 && c <= 0xe103) ? 17 : JoinedForm(c) ? g.width : (g.width + 1)) * fontScale);
         }
         return width;
     }
@@ -839,6 +846,11 @@ bool settings::RasterizeMenu(const MenuSnapshot &current, uint32_t width, uint32
                                            std::max(1, int(fontScale)), std::max(1, int(fontScale)), inkColor);
                         });
                     cx += int(17 * fontScale);
+                }
+                else if (JoinedForm(c) && host_ui::font::GetGlyph(uint32_t(c)).bitmap)
+                {
+                    r.DrawChar(cx, top + dy, uint32_t(c), inkColor, fontScale);
+                    cx += int(host_ui::font::GetGlyph(uint32_t(c)).width * fontScale);
                 }
                 else cx += r.DrawChar(cx, top + dy, uint32_t(c), inkColor, fontScale);
             }

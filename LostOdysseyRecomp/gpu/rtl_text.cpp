@@ -1,10 +1,12 @@
 #include <stdafx.h>
 
+#include "gpu/rtl_text.h"
 #include "cpu/ppc_context.h"
 #include "kernel/heap.h"
 #include "kernel/memory.h"
 
 #include <algorithm>
+#include <atomic>
 #include <map>
 #include <mutex>
 #include <string>
@@ -20,6 +22,8 @@
 //   - styled texts on a screen whose box edge is known (kEdges) end at that edge.
 // The previous frame tells which texts share a column. The game's own per-line x positions
 // (text object +280/+296/+300, used for centring; each replaces x) carry the shift.
+// Every hook here passes straight to the game's code unless the selected language pack is
+// right to left (language.ini direction=rtl).
 
 extern "C" PPC_FUNC(__imp__sub_82314CD8);
 extern "C" PPC_FUNC(__imp__sub_8230B6D8);
@@ -55,31 +59,47 @@ void StoreWord(uint32_t address, uint32_t value)
 float LoadFloat(uint32_t address) { return std::bit_cast<float>(LoadWord(address)); }
 void StoreFloat(uint32_t address, float value) { StoreWord(address, std::bit_cast<uint32_t>(value)); }
 
+std::atomic<bool> gEnabled{false};
+bool Enabled() { return gEnabled.load(std::memory_order_relaxed); }
+
 bool IsArabicForm(uint16_t c) { return (c >= 0xFB50 && c <= 0xFDFF) || (c >= 0xFE70 && c <= 0xFEFC); }
 
-std::u16string GuestString(uint32_t array)
+// Whether a guest TArray<char16_t> (data, count) holds an Arabic form, read in place.
+bool GuestHasArabic(uint32_t array)
 {
     const uint32_t data = LoadWord(array), count = LoadWord(array + 4);
-    std::u16string text;
     if (!data || count == 0 || count > 4096 || !ValidRange(data, count * 2))
-        return text;
+        return false;
     for (uint32_t i = 0; i < count; ++i)
-        if (const uint16_t c = LoadHalf(data + i * 2))
-            text.push_back(char16_t(c));
-    return text;
+        if (IsArabicForm(LoadHalf(data + i * 2)))
+            return true;
+    return false;
 }
 
+// A zero-terminated guest string of at most limit characters.
+std::u16string GuestText(uint32_t at, uint32_t limit)
+{
+    std::u16string text;
+    for (uint32_t i = 0; i < limit && ValidRange(at + i * 2, 2); ++i)
+    {
+        const uint16_t c = LoadHalf(at + i * 2);
+        if (!c) break;
+        text.push_back(char16_t(c));
+    }
+    return text;
+}
+bool HasArabic(const std::u16string &text) { return std::any_of(text.begin(), text.end(), [](char16_t c) { return IsArabicForm(c); }); }
+
+// A left-anchored Arabic text drawn this frame.
 struct Draw
 {
     uint32_t object = 0;
-    float anchor = 0, left = 0, right = 0, top = 0, bottom = 0, width = 0, scale = 0;
-    bool arabic = false, leftAnchored = false;
+    float anchor = 0, top = 0, width = 0, scale = 0;
 };
 
 struct Layout
 {
     std::vector<float> lines;  // width of each line, in screen units
-    float height = 0;          // tallest glyph of the first line, in screen units
 };
 
 std::mutex gMutex;
@@ -100,15 +120,17 @@ float ColumnRight(float x, float y, float width, const std::vector<Row> &rows)
 {
     float right = x + width, top = y, bottom = y;
     size_t members = 1;
+    std::vector<bool> taken(rows.size());
     for (bool grew = true; grew;)
     {
         grew = false;
-        for (const Row &row : rows)
-            if ((row.y < top && top - row.y <= kRowGap) || (row.y > bottom && row.y - bottom <= kRowGap))
+        for (size_t i = 0; i < rows.size(); ++i)
+            if (!taken[i] && rows[i].y >= top - kRowGap && rows[i].y <= bottom + kRowGap)
             {
-                top = std::min(top, row.y);
-                bottom = std::max(bottom, row.y);
-                right = std::max(right, row.right);
+                taken[i] = true;
+                top = std::min(top, rows[i].y);
+                bottom = std::max(bottom, rows[i].y);
+                right = std::max(right, rows[i].right);
                 ++members;
                 grew = true;
             }
@@ -133,11 +155,7 @@ Layout Measure(PPCContext &ctx, uint8_t *base, uint32_t object, float scale)
         const int32_t code = LoadInt(record), value = LoadInt(record + 4), width = LoadInt(record + 8);
         float advance = 0;
         if (code >= 0 && width >= 0)
-        {
             advance = std::trunc((float(width) + kerning + spacing) * scale);
-            if (layout.lines.size() == 1)
-                layout.height = std::max(layout.height, float(LoadInt(record + 12)) * scale);
-        }
         else if (code == -1 && value == 480)
         {
             layout.lines.push_back(0);
@@ -164,10 +182,12 @@ Layout Measure(PPCContext &ctx, uint8_t *base, uint32_t object, float scale)
 PPC_FUNC(sub_82314CD8)
 {
     const uint32_t object = ctx.r3.u32;
-    const std::u16string text = GuestString(object + 236);
-    const bool arabic = std::any_of(text.begin(), text.end(), [](char16_t c) { return IsArabicForm(c); });
-    const bool rightFlag = LoadWord(object + 224) == 1, centred = LoadWord(object + 280) != 0;
-    const bool leftAnchored = !rightFlag && !centred;
+    const bool leftAnchored = LoadWord(object + 224) != 1 && LoadWord(object + 280) == 0;
+    if (!Enabled() || !leftAnchored || !GuestHasArabic(object + 236))
+    {
+        __imp__sub_82314CD8(ctx, base);
+        return;
+    }
     const float scale = LoadWord(object + 292) ? LoadFloat(kUnitScale) : LoadFloat(object + 180) * float(ctx.f1.f64);
     const float x = float(int32_t(LoadFloat(object + 4))), y = float(int32_t(LoadFloat(object + 8)));
 
@@ -181,26 +201,20 @@ PPC_FUNC(sub_82314CD8)
     }
     Layout layout = Measure(ctx, base, object, scale);
     const float natural = *std::max_element(layout.lines.begin(), layout.lines.end());
-    const float height = std::max(layout.height, 1.0f);
-
-    Draw self{object, x, x, x + natural, y, y + height, natural, scale, arabic, leftAnchored};
-    if (rightFlag)
-        self.left = x - natural, self.right = x;
 
     float right = x + natural;
-    if (arabic && leftAnchored && natural > 0)
+    if (natural > 0)
     {
         std::vector<Row> rows;
         for (const Draw &other : gPrevious)
-            if (other.arabic && other.leftAnchored && other.object != object && std::abs(other.anchor - x) <= 2 &&
-                std::abs(other.scale - scale) < 0.01f)
+            if (other.object != object && std::abs(other.anchor - x) <= 2 && std::abs(other.scale - scale) < 0.01f)
                 rows.push_back({other.top, other.anchor + other.width});
         right = ColumnRight(x, y, natural, rows);
     }
 
-    gCurrent.push_back(self);
+    gCurrent.push_back({object, x, y, natural, scale});
 
-    if (!arabic || !leftAnchored || natural <= 0 || layout.lines.size() > kMaxLines)
+    if (natural <= 0 || layout.lines.size() > kMaxLines)
     {
         lock.unlock();
         __imp__sub_82314CD8(ctx, base);
@@ -232,20 +246,18 @@ constexpr float kSlashWidth = 16; // BigNum '/' (12) and a little air, before th
 
 PPC_FUNC(sub_8230B6D8)
 {
+    if (!Enabled())
+    {
+        __imp__sub_8230B6D8(ctx, base);
+        return;
+    }
     PPCContext call = ctx;
     call.r3.u64 = kIconTable;
     call.r4.u64 = ctx.r5.u32;
     sub_8230BA20(call, base);
     const uint32_t style = call.r3.u32;
-    std::u16string format;
-    if (style && LoadWord(style + 12))
-        for (uint32_t at = LoadWord(style + 8), i = 0; i < 256 && ValidRange(at + i * 2, 2); ++i)
-        {
-            const uint16_t c = LoadHalf(at + i * 2);
-            if (!c) break;
-            format.push_back(char16_t(c));
-        }
-    const bool arabic = std::any_of(format.begin(), format.end(), [](char16_t c) { return IsArabicForm(c); });
+    const std::u16string format = style && LoadWord(style + 12) ? GuestText(LoadWord(style + 8), 256) : std::u16string();
+    const bool arabic = HasArabic(format);
     float boxWidth = 0;
     if (arabic && ctx.r8.u32)
     {
@@ -265,8 +277,9 @@ PPC_FUNC(sub_8230B6D8)
     const bool flip = arabic && LoadWord(style + 36) == 1 && boxWidth > 0 && margin >= 0 && margin <= kMaxFlipMargin;
     // "current / maximum": three styles on one row, the maximum right-aligned in a field wide
     // enough for four digits, so a short maximum stands far from its "/". It is drawn from just
-    // after the "/" instead. A "/" style is remembered by element and row; the maximum may be drawn
-    // first, so the pairing holds from the next frame.
+    // after the "/" instead (right-to-left packs only, so other languages keep the game's layout).
+    // A "/" style is remembered by element and row; the maximum may be drawn first, so the pairing
+    // holds from the next frame.
     int32_t closeUp = -1;
     if (style && LoadWord(style + 12))
     {
@@ -343,14 +356,8 @@ const std::pair<std::u16string_view, float> kPlaced[] = {
 
 PPC_FUNC(sub_8230C118)
 {
-    std::u16string text;
-    for (uint32_t at = ctx.r8.u32, i = 0; i < 256 && ValidRange(at + i * 2, 2); ++i)
-    {
-        const uint16_t c = LoadHalf(at + i * 2);
-        if (!c) break;
-        text.push_back(char16_t(c));
-    }
-    if (!std::any_of(text.begin(), text.end(), [](char16_t c) { return IsArabicForm(c); }))
+    const std::u16string text = Enabled() ? GuestText(ctx.r8.u32, 256) : std::u16string();
+    if (!HasArabic(text))
     {
         __imp__sub_8230C118(ctx, base);
         return;
@@ -421,16 +428,10 @@ uint32_t gCharacter = 0; // guest char16_t[2]
 
 PPC_FUNC(sub_82319F70)
 {
-    const uint32_t font = ctx.r7.u32, string = ctx.r6.u32;
-    std::u16string text;
-    for (uint32_t i = 0; i < 1024 && ValidRange(string + i * 2, 2); ++i)
-    {
-        const uint16_t c = LoadHalf(string + i * 2);
-        if (!c) break;
-        text.push_back(char16_t(c));
-    }
-    const int32_t kerning = font ? LoadInt(font + 108) : 0;
-    if (kerning >= 0 || kerning < -32 || !std::any_of(text.begin(), text.end(), [](char16_t c) { return IsArabicForm(c); }))
+    const uint32_t font = ctx.r7.u32;
+    const int32_t kerning = Enabled() && font ? LoadInt(font + 108) : 0;
+    const std::u16string text = kerning < 0 && kerning >= -32 ? GuestText(ctx.r6.u32, 1024) : std::u16string();
+    if (!HasArabic(text))
     {
         __imp__sub_82319F70(ctx, base);
         return;
@@ -460,6 +461,8 @@ PPC_FUNC(sub_828088E0)
 {
     const uint32_t element = ctx.r3.u32;
     __imp__sub_828088E0(ctx, base);
+    if (!Enabled())
+        return;
     const uint32_t font = LoadWord(element), characters = LoadWord(element + 120), count = LoadWord(element + 124);
     const uint32_t sprites = LoadWord(element + 140), spriteCount = LoadWord(element + 144);
     const uint32_t delays = LoadWord(element + 152), delayCount = LoadWord(element + 156);
@@ -469,7 +472,7 @@ PPC_FUNC(sub_828088E0)
     std::u16string text;
     for (uint32_t i = 0; i + 1 < count; ++i)
         text.push_back(char16_t(LoadHalf(characters + i * 2)));
-    if (!std::any_of(text.begin(), text.end(), [](char16_t c) { return IsArabicForm(c); }))
+    if (!HasArabic(text))
         return;
     constexpr float kHalf = 0.5f; // the layout's centre factor (0x8201F9F0)
     const float widthScale = LoadFloat(font + 112), heightScale = LoadFloat(font + 116);
@@ -524,4 +527,9 @@ PPC_FUNC(sub_828088E0)
             StoreFloat(sprite, -4096.0f);
             StoreFloat(sprite + 4, -4096.0f);
         }
+}
+
+namespace rtl_text
+{
+void SetEnabled(bool enabled) { gEnabled.store(enabled, std::memory_order_relaxed); }
 }

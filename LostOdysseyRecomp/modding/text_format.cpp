@@ -684,7 +684,7 @@ std::vector<uint8_t> RebuildXmlBin(std::span<const uint8_t> d, const Replacement
         const auto key = std::make_pair(ascii, value);
         if (const auto it = placed.find(key); it != placed.end()) return it->second;
         const size_t bytes = ascii ? value.size() : value.size() * 2;
-        Require(pool.size() <= 0xFFFF && bytes <= 0x7FFF, "xmlbin string pool over 64 KiB");
+        Require(bytes <= 0x7FFF && pool.size() + 2 + bytes <= 0x10000, "xmlbin string pool over 64 KiB");
         const auto offset = uint16_t(pool.size());
         const auto length = uint16_t(bytes | (ascii ? 0x8000 : 0));
         pool.push_back(uint8_t(length));
@@ -785,11 +785,16 @@ bool RewriteDreamKey(const ue3::Package &package, std::span<const uint8_t> d, ue
         bool changed = false;
         if (tag.name == "Title" && tag.type == "StrProperty" && title)
         {
+            // An unchanged Title keeps its bytes (an empty narrow one is stored with its NUL).
             size_t pos = tag.value;
-            const bool wide = ReadFString(d.first(tag.value + tag.size), pos).wide;
-            value.clear();
-            WriteFString(value, FString{DecodeText(*title), wide});
-            changed = true;
+            const auto original = ReadFString(d.first(tag.value + tag.size), pos);
+            auto text = DecodeText(*title);
+            if (text != original.value)
+            {
+                value.clear();
+                WriteFString(value, FString{std::move(text), original.wide});
+                changed = true;
+            }
         }
         else if (tag.name == "Postion" && tag.size == 12 && (x || y))
         {
