@@ -8,23 +8,41 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 ### English
 
-- After sharing duplicate disc data, the message explains that Explorer's folder size stays the same and you should check free disk space; it also confirms when sharing is already complete (#575).
-- Cheats now offers Normal, Half or None for random encounters and a separate Battle EXP ×2 switch.
-- Debug Menu → Cheats → Quick tools: choose Normal, Fast or Faster camp menu animations; Normal remains the default (#577).
-- The black transition after battle now covers the whole screen at 4:3 and ultrawide aspect ratios (#582).
-- Fast-forward keeps the original audio pitch by default; Fast-forward audio → Speed up restores the higher-pitched sound.
-- Areas and battles load faster with a higher frame-rate limit during loading.
 - Language packs for right-to-left languages such as Arabic (`direction=rtl` in `language.ini`): text is right-aligned in menus, lists, help bars and dialogue (layout is not mirrored), Arabic joins correctly on the title and pause screens, and Arabic mod names show in the settings menu. Packs can also translate the Thousand Years of Dreams text and the place names (name_data.xmb).
 
 ### 简体中文
 
+- 支持阿拉伯语等从右到左书写的语言包（`language.ini` 中写 `direction=rtl`）：菜单、列表、帮助栏和对话中的文字右对齐（界面布局不镜像），标题画面和暂停画面的阿拉伯文字母正确连写，设置菜单可显示阿拉伯语的 Mod 名称。语言包还可以翻译“千年之梦”的文字和地名（name_data.xmb）。
+
+## [v1.0.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.0) — 2026-10-17
+
+### English
+
+- The title screen shows Lost Odyssey Recomp's free and open-source notice, project address and a refund reminder for anyone who paid for the port.
+- Desktop: Discord Rich Presence shows your location, disc and current activity; Settings → System → Discord status turns it on or off.
+- Settings → Graphics → Dynamic shadows has a Low choice: only the 8 largest characters and objects on screen cast shadows, which lightens the GPU load in busy areas.
+- Debug Menu → Overview → Return to title lets you return to the title screen outside battles, after confirming that unsaved progress will be lost (#592).
+- Android: CTRL → Saves and logs can keep saves in the game folder for syncing with a PC (#587).
+- After sharing duplicate disc data, the message explains that Explorer's folder size stays the same and you should check free disk space; it also confirms when sharing is already complete (#575).
+- Cheats → Encounter rate offers Normal, Half, None or the temporary Every step mode, alongside a separate Battle EXP ×2 switch.
+- Debug Menu → Cheats → Quick tools: choose Normal, Fast or Faster camp menu animations; Normal remains the default (#577).
+- The black transition after battle now covers the whole screen at 4:3 and ultrawide aspect ratios (#582).
+- Fast-forward keeps the original audio pitch by default; Fast-forward audio → Speed up restores the higher-pitched sound.
+- Areas and battles load faster with a higher frame-rate limit during loading.
+
+### 简体中文
+
+- 标题画面新增 Lost Odyssey Recomp 免费开源署名、项目地址，以及付费购买后申请退款的提示。
+- 桌面版：Discord 状态显示当前地点、光盘和活动，可在“设置 → 系统 → Discord 状态”中开关。
+- 设置 → 图像 → 动态阴影新增“低”：只给画面上最大的 8 个角色和物体画阴影，减轻人多场景的 GPU 负担。
+- 调试菜单 → Overview → 返回标题：战斗外确认放弃未保存的进度后，可返回标题画面（#592）。
+- Android：CTRL → Saves and logs 可将存档保存在游戏文件夹，方便与电脑同步（#587）。
 - 共享重复光盘数据后，提示会说明资源管理器显示的文件夹大小不会减少，应查看磁盘可用空间；数据已共享时也会明确提示已完成（#575）。
-- 调试菜单的 Cheats 页新增正常、减半或关闭随机遇敌，以及独立的战斗经验 ×2 开关。
+- 调试菜单的 Cheats → 遇敌率可选正常、减半、关闭或临时的一步一遇敌模式，另有独立的战斗经验 ×2 开关。
 - 调试菜单 → Cheats → Quick tools：营地菜单动画可选正常、快速或更快，默认正常（#577）。
 - 战斗结束后的黑屏过渡会覆盖整个屏幕，包括 4:3 和超宽画面比例（#582）。
 - 快进默认保持声音原有音调；在“变速音频”中选择“随速度升调”可恢复原有的升调效果。
 - 加载地图和战斗时临时提高帧率上限，缩短等待时间。
-- 支持阿拉伯语等从右到左书写的语言包（`language.ini` 中写 `direction=rtl`）：菜单、列表、帮助栏和对话中的文字右对齐（界面布局不镜像），标题画面和暂停画面的阿拉伯文字母正确连写，设置菜单可显示阿拉伯语的 Mod 名称。语言包还可以翻译“千年之梦”的文字和地名（name_data.xmb）。
 
 ## [v0.9.65](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v0.9.65) — 2026-10-15
 

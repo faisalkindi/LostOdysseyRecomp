@@ -73,7 +73,7 @@
 - **Mali 设备：** 同样会先打开 **GPU driver** 页面，在那里下载推荐的 PanVK 驱动；需要 Mali-G57、G68、G77、G78 或 Mali-G610 及更新的 GPU。
 - **操作：** 连接手柄后触摸按键自动隐藏。**CTRL** 可以调整触摸按键的大小、透明度和布局。
 - **更新：** 新 APK 直接覆盖安装，存档保留。
-- **存档：** **CTRL → Saves and logs** 可以把存档导出成 ZIP，也能导入来自电脑、Xenia 或 RGH 存档转换器的 ZIP。
+- **存档：** **CTRL → Saves and logs** 可以把存档导出成 ZIP，也能导入来自电脑、Xenia 或 RGH 存档转换器的 ZIP。其中 **Keep saves in the game folder（将存档保存在游戏文件夹中）** 选项可把存档放到 `<游戏文件夹>/save/`，方便与电脑同步；默认关闭，下次启动应用时生效。
 - **日志：** **CTRL → Saves and logs → Export logs** 可以把日志导出成 ZIP，用于反馈问题（[详见](docs/INSTALLING.zh-CN.md#android-logs)）。
 
 [详细步骤](docs/INSTALLING.zh-CN.md#android)。
@@ -99,6 +99,7 @@
 | 输入 | 手柄、键盘和震动；Android 上有触摸按键。 |
 | Mod | 仅 Windows：纹理、模型、菜单和字体替换、过场影片替换、文本翻译和语言包（可补充游戏字体缺少的字母），以及 PlayStation 按键提示，可手动安装或用 Mod Organizer 2 管理（插件在 Windows ZIP 中）。其他平台也可能加载 Mod，但不提供支持。见 [Mod 指南](docs/wiki/Modding.md)。现成的 Mod（例如 4x 高清纹理包）在 [Discord](https://discord.gg/z2yPct6z2w) 的 **#mods** 论坛里分享。 |
 | 成就 | 游戏的 36 个 Xbox 360 成就，解锁时显示 Xbox 360 风格的通知并播放提示音。**设置 → 系统 → 成就**列出全部成就和解锁日期，也可以把通知设为开启、静音或关闭。在 `settings.ini` 旁边放一个 `achievement.wav` 可以替换提示音。 |
+| Discord 状态 | Windows、Linux 和 macOS：在 Discord 中显示当前地点、光盘和活动。**设置 → 系统 → Discord 状态**默认开启，修改后立即生效。状态未显示时，可在运行日志中查看连接和活动诊断信息。 |
 | 调试菜单 | 渲染捕获、随时存档、遇敌开关、传送、快进和修改。见[调试菜单](#调试菜单)。 |
 
 ## 操作按键
@@ -134,11 +135,11 @@
 
 ### Overview：捕获与游戏操作
 
-**Overview** 显示当前地图，并提供菜单语言、**Capture render state（捕获渲染状态）**、**Save Anywhere（随时存档）**、**Encounter Every Step（一步一遇敌）**，以及直接赢下当前战斗的操作。
+**Overview** 显示当前地图，并提供菜单语言、**Capture render state（捕获渲染状态）**、**Save Anywhere（随时存档）**、**Return to title（返回标题，仅限战斗外）**，以及直接赢下当前战斗的操作。
 
 - **Capture render state：** 确认后关闭菜单。归档保存在 `captures/`，内含截图、渲染数据和日志，分享前请检查内容。
 - **Save Anywhere** 会开放原作的 **System → Save（系统 → 存档）**。
-- **Encounter Every Step** 让每走一步都遇敌，仅在有随机遇敌的区域生效。
+- **Return to title** 会在确认后返回标题画面，未保存的进度将丢失。从开始切入战斗、胜利及结算画面，直到恢复场景或世界地图控制前均不可用。请先关闭存档/读档画面，并等待保存或读取完成后再使用。
 
 ### Teleport：当前地图内移动
 
@@ -161,7 +162,7 @@
 
 **快进**倍率 2×–8×，按住 **LT**（**Hold**）或按一下切换（**Toggle**）。**变速音频**默认**保持音调**，也可选择**随速度升调**。选择会保存。
 
-**遇敌率**可选**正常**、**减半**或**关闭**。减半会跳过每隔一次的随机遇敌，剧情战斗和 Boss 不受影响。**战斗经验 ×2** 可单独开启，使战斗获胜所得的经验加倍。两项设置都会保存。
+**遇敌率**可选**正常**、**减半**、**关闭**或**一步一遇敌**。减半会跳过每隔一次的随机遇敌；一步一遇敌仅在有随机遇敌的区域生效。剧情战斗和 Boss 不受影响。一步一遇敌用于临时测试，重启后恢复最后选择的正常／减半／关闭。**战斗经验 ×2** 可单独开启并保存，使战斗获胜所得的经验加倍。
 
 经验按游戏原有的等级差规则计算后再翻倍，保留原有的单场上限。SP 和金币保持原样。
 
@@ -177,7 +178,7 @@ Windows ZIP 是**便携式**的，所有文件都留在解压目录里。AppImag
 | Linux AppImage | `~/.config/lost-odyssey-recomp/` | `~/.local/share/lost-odyssey-recomp/` | `~/.local/state/lost-odyssey-recomp/` |
 | Linux Flatpak | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/config/lost-odyssey-recomp/` | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/data/` | `~/.var/app/io.github.freefrank.LostOdysseyRecomp/.local/state/lost-odyssey-recomp/` |
 | macOS 应用 | `~/Library/Application Support/LostOdysseyRecomp/` | 同左 | `~/Library/Logs/LostOdysseyRecomp/` |
-| Android | 应用内部 | 应用内部；游戏数据在 `Android/data/io.github.freefrank.lostodyssey/files/game/` | `Android/data/io.github.freefrank.lostodyssey/files/logs/` |
+| Android | 应用内部 | 存档默认在应用内部，可改为 `<游戏文件夹>/save/`；游戏数据在 `Android/data/io.github.freefrank.lostodyssey/files/game/` 或所选文件夹 | `Android/data/io.github.freefrank.lostodyssey/files/logs/` |
 
 | 内容 | 位置 | 说明 |
 | :--- | :--- | :--- |
@@ -241,11 +242,11 @@ flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 
 ## 赞助者
 
-感谢 **Frenzy Fresh**、**José Antonio Martínez Godoy**、**C_BAR**、**Arakon**、**Efren V**、**Torresmo**、**doc_haz**、**Whitesun** 和 **Cristian** 在 [Ko-fi](https://ko-fi.com/dotslash) 上支持本项目。
+感谢 **CarlosVonSexron**、**Atlas**、**stratosG**、**iambRad**、**Frenzy Fresh**、**José Antonio Martínez Godoy**、**C_BAR**、**Arakon**、**Efren V**、**Torresmo**、**doc_haz**、**Whitesun** 和 **Cristian** 在 [Ko-fi](https://ko-fi.com/dotslash) 上，以及 **Norghat**、**Morgan** 和一位匿名支持者在 [Buy Me a Coffee](https://buymeacoffee.com/dotslash) 上支持本项目。
 
 ## 致谢与游戏数据
 
-感谢所有提交过 PR 和补丁的人：[MikeRavenelle](https://github.com/MikeRavenelle)、[dj5927](https://github.com/dj5927)、[Xarishark](https://github.com/Xarishark)、[navjack](https://github.com/navjack)、[frankzzz](https://github.com/frankzzz) 和 [cngjd](https://github.com/cngjd)。macOS 版本最初来自 MikeRavenelle 在 Apple Silicon 上的工作。
+感谢所有提交过 PR 和补丁的人：[MikeRavenelle](https://github.com/MikeRavenelle)、[dj5927](https://github.com/dj5927)、[Xarishark](https://github.com/Xarishark)、[navjack](https://github.com/navjack)、[frankzzz](https://github.com/frankzzz)、[cngjd](https://github.com/cngjd)、[faisalkindi](https://github.com/faisalkindi) 和 [Ad0ky](https://github.com/Ad0ky)。macOS 版本最初来自 MikeRavenelle 在 Apple Silicon 上的工作；Ad0ky 在 `LostOdysseyNX` 分支上把游戏移植到了 Nintendo Switch。
 
 本项目参考 [UnleashedRecomp](https://github.com/hedge-dev/UnleashedRecomp)、[re:Blue](https://github.com/zolaware/reblue)、[XenonRecomp](https://github.com/hedge-dev/XenonRecomp)、[XenosRecomp](https://github.com/hedge-dev/XenosRecomp)、[plume](https://github.com/renderbag/plume) 和 [Xenia](https://github.com/xenia-project/xenia)。音频采用 [Xenia FFmpeg 分支](https://github.com/xenia-project/FFmpeg)（[许可证](thirdparty/ffmpeg-LICENSE.txt)）。Android 上的 Turnip GPU 驱动来自 [Eden](https://git.eden-emu.dev/eden-emu/eden) 模拟器的驱动列表，通过 [libadrenotools](https://github.com/bylaws/libadrenotools) 加载；Mali 上的 PanVK 驱动来自 [panvk-kbase-android](https://github.com/zenithblue-oss/panvk-kbase-android)。
 

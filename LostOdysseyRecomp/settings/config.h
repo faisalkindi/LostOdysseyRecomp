@@ -132,7 +132,9 @@ struct Config
     uint32_t depthOfFieldPercent = 100; // Tone-map DoF strength; 0 Off, 100 retail. Applied live.
     bool bloom = true; // Tone-map bloom. Applied live by the renderer.
     bool motionBlur = true; // The game's motion blur pass. Applied live.
-    bool dynamicShadows = true; // The game's shadow-map rendering. Applied live.
+    // The game's per-object shadows, applied live: 0 Off, 1 On (retail), 2 Low
+    // (only objects large on screen cast one, patches/shadow_budget.cpp).
+    uint32_t dynamicShadows = 1;
     // View-frustum culling, 0..200 in steps of 10: 100 retail, lower draws
     // objects at the screen edges longer, higher hides them sooner. Applied live.
     uint32_t cullingPercent = 100;
@@ -166,6 +168,7 @@ struct Config
     hid::input_map::KeyboardMap keyboardMap = hid::input_map::DefaultKeyboard;
     bool fxaa = false; // Legacy serialized mirror; antialiasing is authoritative.
     bool automaticUpdates = true;
+    bool discordStatus = true; // Discord Rich Presence; desktop only. Applied live.
     bool askCompactGameData = true; // Offer to share duplicate disc archives before the game starts.
     bool debugLog = false; // Writes info and kernel lines to the runtime log. Applied live.
     uint32_t audioOutput = AudioOutputStereo; // Applied live; saved by SaveAudioOutput.

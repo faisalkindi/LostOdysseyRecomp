@@ -228,8 +228,8 @@ Config Read()
             value.bloom = number == 1;
         else if (key == "motion_blur" && number <= 1)
             value.motionBlur = number == 1;
-        else if (key == "dynamic_shadows" && number <= 1)
-            value.dynamicShadows = number == 1;
+        else if (key == "dynamic_shadows" && number <= 2)
+            value.dynamicShadows = number;
         else if (key == "culling")
             value.cullingPercent = number;
         else if (key == "vibration")
@@ -336,6 +336,8 @@ Config Read()
         }
         else if (key == "ask_compact_game_data" && number <= 1)
             value.askCompactGameData = number == 1;
+        else if (key == "discord_status" && number <= 1)
+            value.discordStatus = number == 1;
         else if (key == "debug_log" && number <= 1)
             value.debugLog = number == 1;
     }
@@ -461,7 +463,7 @@ static bool WriteConfig(const Config &value)
            << "\ndepth_of_field=" << value.depthOfFieldPercent
            << "\nbloom=" << (value.bloom ? 1 : 0)
            << "\nmotion_blur=" << (value.motionBlur ? 1 : 0)
-           << "\ndynamic_shadows=" << (value.dynamicShadows ? 1 : 0)
+           << "\ndynamic_shadows=" << value.dynamicShadows
            << "\nculling=" << value.cullingPercent
            << "\nvibration=" << value.vibrationPercent
            << "\nbutton_prompts=" << value.buttonPrompts
@@ -488,6 +490,7 @@ static bool WriteConfig(const Config &value)
            << "\nframe_generation_target_fps=" << value.frameGenerationTargetFps
            << "\ninternal_resolution=" << value.internalResolution
            << "\nfxaa=" << value.fxaa << "\nautomatic_updates=" << value.automaticUpdates
+           << "\ndiscord_status=" << (value.discordStatus ? 1 : 0)
            << "\nask_compact_game_data=" << (value.askCompactGameData ? 1 : 0)
            << "\ndebug_log=" << (value.debugLog ? 1 : 0)
            << "\naudio_output=" << value.audioOutput

@@ -30,7 +30,7 @@
 
 需要 Windows x64 和支持 AVX 的 CPU。默认使用 Vulkan，也可以在设置中改用 Direct3D 12。已保存的设置保留原来的渲染器。
 
-1. 从[最新发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/latest)下载 `LostOdysseyRecomp-windows-x64-v0.9.65.zip`。
+1. 从[最新发布页](https://github.com/freefrank/LostOdysseyRecomp/releases/latest)下载 `LostOdysseyRecomp-windows-x64-v1.0.0.zip`。
 2. 把整个 ZIP 解压到可写目录，不要放在 `Program Files` 下。
 3. 运行 `LostOdysseyRecomp.exe`。找不到游戏时会打开导入器。
 4. 选择语言和图形选项。游戏可能会先询问是否下载预编译着色器，见[着色器准备](#shader-preparation)。
@@ -113,17 +113,17 @@ Linux 使用 Vulkan。Steam Deck 和其他 Linux 硬件的测试还不多。从�
 
 ### AppImage
 
-下载 `LostOdysseyRecomp-linux-x64-v0.9.65.AppImage` 后运行：
+下载 `LostOdysseyRecomp-linux-x64-v1.0.0.AppImage` 后运行：
 
 ```bash
-chmod +x LostOdysseyRecomp-linux-x64-v0.9.65.AppImage
-./LostOdysseyRecomp-linux-x64-v0.9.65.AppImage
+chmod +x LostOdysseyRecomp-linux-x64-v1.0.0.AppImage
+./LostOdysseyRecomp-linux-x64-v1.0.0.AppImage
 ```
 
 可以在导入器里导入游戏，也可以直接指定游戏文件夹启动：
 
 ```bash
-./LostOdysseyRecomp-linux-x64-v0.9.65.AppImage --game /path/to/game
+./LostOdysseyRecomp-linux-x64-v1.0.0.AppImage --game /path/to/game
 ```
 
 AppImage 把存档和设置放在当前用户的目录，见[文件位置](#file-locations)。
@@ -140,7 +140,7 @@ flatpak install --user flathub org.freedesktop.Platform//26.08
 再安装并运行下载的 bundle：
 
 ```bash
-flatpak --user install --bundle LostOdysseyRecomp-linux-x64-v0.9.65.flatpak
+flatpak --user install --bundle LostOdysseyRecomp-linux-x64-v1.0.0.flatpak
 flatpak run io.github.freefrank.LostOdysseyRecomp
 ```
 
@@ -152,7 +152,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 
 需要 macOS 15 或更高版本的 Apple Silicon Mac。应用未经公证，macOS 会拦截首次启动。
 
-1. 下载 `LostOdysseyRecomp-macos-arm64-v0.9.65.dmg` 并打开。
+1. 下载 `LostOdysseyRecomp-macos-arm64-v1.0.0.dmg` 并打开。
 2. 把 `LostOdysseyRecomp.app` 拖到 Applications 链接上，然后推出磁盘映像。
 3. 从“应用程序”打开 `LostOdysseyRecomp`。macOS 第一次会拦截它。打开 **系统设置 → 隐私与安全性**，滚动到“安全性”，点击应用旁的 **仍要打开**（这个按钮只在启动被拦截后出现）。macOS 再次询问时点击 **打开**，可能需要输入密码。之后的启动不再需要批准。
 4. 找不到游戏时会打开导入器，见[导入游戏数据](#automatic-content-import)。
@@ -177,10 +177,14 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 
 游戏画面上有触摸按键。**CTRL** 可以调整触摸按键的大小、透明度和布局，也能进入 Saves、Game folder 和 GPU driver 页面。连接 USB 或蓝牙手柄后触摸按键自动隐藏。设置在游戏内的设置页面修改。
 
-开启 **Automatic updates（自动更新）** 时，应用启动会检查新版本并提供 APK 下载。新 APK 直接覆盖安装，存档和设置保留。如果装过自己构建的 APK，需要先卸载。卸载应用会删除存档和 `Android/data` 里的游戏数据。
+开启 **Automatic updates（自动更新）** 时，应用启动会检查新版本并提供 APK 下载。新 APK 直接覆盖安装，存档和设置保留。如果装过自己构建的 APK，需要先卸载。卸载应用会删除其内部存档和自身 `Android/data` 文件夹里的全部数据。
 
 <a id="android-saves"></a>
-**存档**保存在应用内部，文件管理器访问不到。**CTRL → Saves and logs** 可以把所有存档位导出成一个 ZIP，保存到你选的位置（例如 Download），也可以导入包含存档文件夹的 ZIP：这里或电脑上导出的、打包 Xenia `userNN` 文件夹得到的，或者 [RGH 存档转换器](#console-saves)下载的 ZIP。卸载应用前请先导出存档。
+**存档**默认保存在应用内部，文件管理器访问不到。**CTRL → Saves and logs** 可以把所有存档位导出成一个 ZIP，保存到你选的位置（例如 Download），也可以导入包含存档文件夹的 ZIP：这里或电脑上导出的、打包 Xenia `userNN` 文件夹得到的，或者 [RGH 存档转换器](#console-saves)下载的 ZIP。卸载应用前请先导出存档。
+
+要用文件夹同步，先在 **CTRL → Game folder** 选择共享存储或 SD 卡上的文件夹，再在 **CTRL → Saves and logs** 开启 **Keep saves in the game folder（将存档保存在游戏文件夹中）**。该选项默认关闭。存档放在 `<游戏文件夹>/save/userNN/`，包含 `save.bin`、`.lo-content` 和每个存档位里的其他文件，与 Windows 布局完全相同。把整个 `save/` 文件夹与电脑上 `LostOdysseyRecomp.exe` 旁已有的 `save/` 同步，或在启动 Windows 版前将 `LO_SAVE_DIR` 设为同步后 `save/` 文件夹的完整路径。同步前请关闭两台设备上的游戏。
+
+开关都在完全关闭游戏、下次启动应用时生效。应用会把存档复制到所选位置，逐个校验文件后才切换；关闭选项时会复制回应用内部。如果目标存档内容不同，且时间相同或更新，会先询问是否替换。源文件会保留作为备份。启动时游戏文件夹缺失或不可写，本次运行会改用内部存储，并显示提示。
 
 <a id="android-logs"></a>
 **日志**用于反馈问题：先在**设置 → 系统**打开“调试日志”，玩到问题出现，然后选择 **CTRL → Saves and logs → Export logs…**，把 ZIP 保存到例如 Download。ZIP 里有最近三次运行的日志、`native-stderr.log`，应用本身出错时还有 `java-crash-*.txt`。游戏闪退或一直黑屏时，再打开一次应用，从 CTRL 菜单导出。这些文件也在 `Android/data/io.github.freefrank.lostodyssey/files/logs/`，可以用 USB 复制到电脑。使用 adb 时，`adb logcat -s LostOdyssey` 可以实时看到同样的内容。
@@ -218,7 +222,7 @@ flatpak run io.github.freefrank.LostOdysseyRecomp
 | Linux AppImage | 存档、个人配置、缓存和游戏：`~/.local/share/lost-odyssey-recomp/`。设置：`~/.config/lost-odyssey-recomp/`。日志：`~/.local/state/lost-odyssey-recomp/logs/`。 |
 | Linux Flatpak | 在 `~/.var/app/io.github.freefrank.LostOdysseyRecomp/` 下：存档、个人配置、缓存和游戏在 `data/`（沙盒内为 `/var/data`）；设置在 `config/lost-odyssey-recomp/`；日志在 `.local/state/lost-odyssey-recomp/logs/`。 |
 | macOS | 存档、个人配置、缓存、游戏和设置：`~/Library/Application Support/LostOdysseyRecomp/`。日志：`~/Library/Logs/LostOdysseyRecomp/logs/`。 |
-| Android | 游戏：`Android/data/io.github.freefrank.lostodyssey/files/game/`（或在 **Game folder** 页面选择的文件夹）。日志：`Android/data/io.github.freefrank.lostodyssey/files/logs/`。存档和设置保存在应用内部；用 **CTRL → Saves and logs** 导出和导入存档。 |
+| Android | 游戏：`Android/data/io.github.freefrank.lostodyssey/files/game/`（或在 **Game folder** 页面选择的文件夹）。日志：`Android/data/io.github.freefrank.lostodyssey/files/logs/`。设置和默认存档保存在应用内部；**Keep saves in the game folder** 改用 `<游戏文件夹>/save/`（[详见](#android-saves)）。 |
 
 渲染捕获保存在 `captures/`，Mod 放在 `mods/`：Windows ZIP 都在程序旁边；其他安装包的捕获在设置目录，Mod 在数据目录。下载的着色器放在 `shaders/`，位置和 Mod 相同。用 Mod Organizer 2 管理 Mod 见 [Mod Organizer 2](wiki/Mod-Organizer-2.md)。
 
@@ -228,7 +232,7 @@ Linux 上可以用 `XDG_CONFIG_HOME`、`XDG_DATA_HOME` 和 `XDG_STATE_HOME` 改�
 
 ## 导入 Xenia 或 Xbox 360 存档
 
-每个存档位是 `save/` 里的一个文件夹，例如 `save/user00/save.bin`；`save/` 的位置见[文件位置](#file-locations)。先关闭游戏并备份 `save/`。复制进去的存档会出现在游戏的读档列表里。Android 上改用 **CTRL → Saves and logs** 导入包含存档文件夹的 ZIP（[详见](#android-saves)）。
+每个存档位是 `save/` 里的一个文件夹，例如 `save/user00/save.bin`；`save/` 的位置见[文件位置](#file-locations)。先关闭游戏并备份 `save/`。复制进去的存档会出现在游戏的读档列表里。Android 上可用 **CTRL → Saves and logs** 导入包含存档文件夹的 ZIP；开启 **Keep saves in the game folder** 后，也可复制到游戏文件夹的 `save/`（[详见](#android-saves)）。
 
 <a id="xenia-saves"></a>
 
@@ -271,7 +275,7 @@ Xenia 的存档格式相同，不需要转换。
 
 ```bash
 LostOdysseyRecomp.exe --game "D:\Games\Lost Odyssey"
-./LostOdysseyRecomp-linux-x64-v0.9.65.AppImage --game ~/Games/LostOdyssey
+./LostOdysseyRecomp-linux-x64-v1.0.0.AppImage --game ~/Games/LostOdyssey
 flatpak run io.github.freefrank.LostOdysseyRecomp --game ~/Games/LostOdyssey
 LostOdysseyRecomp.app/Contents/MacOS/LostOdysseyRecomp --game ~/Games/LostOdyssey
 ```
@@ -285,6 +289,7 @@ LostOdysseyRecomp.app/Contents/MacOS/LostOdysseyRecomp --game ~/Games/LostOdysse
 | `LO_FG_PROVIDER`、`LO_FG_MODE`、`LO_FG_MULTIPLIER`、`LO_FG_TARGET_FPS` | 插帧：`off`/`dlss`/`fsr`/`xess`；`off`/`fixed`/`dynamic`；2–6 倍；目标帧率（[详情](notes/vulkan-fg-fsr4-metalfx.md)）。 |
 | `LO_OPTISCALER_PATH` | 仅 Windows：自备 `OptiScaler.dll` 的完整路径（[配置方法](notes/vulkan-fg-fsr4-metalfx.md#optional-optiscaler-loading-on-windows)）。 |
 | `LO_NO_UPDATE` | 设为 `0` 以外的任何值即跳过更新检查。 |
+| `LO_SAVE_DIR` | `save/` 文件夹的完整路径，里面包含各存档位的 `userNN` 文件夹；可用于同步 Windows 和 Android 存档。 |
 | `LO_PROFILE_DIR`、`LO_SHADER_CACHE_DIR`、`LO_MODS_DIR` | 使用其他个人配置、着色器缓存或 Mod 目录。`LO_SHADER_CACHE_DIR` 设为空值会关闭着色器缓存。 |
 | `LO_MODS` | `0` 或 `false` 关闭 Mod。 |
 | `LO_LOG_FILE` | 把日志写到指定路径；设为 `0` 则不写日志文件。 |
