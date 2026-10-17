@@ -14,6 +14,16 @@ Brief release highlights, newest first. Dates are UTC. Technical validation is r
 
 - 支持阿拉伯语等从右到左书写的语言包（`language.ini` 中写 `direction=rtl`）：菜单、列表、帮助栏和对话中的文字右对齐（界面布局不镜像），标题画面和暂停画面的阿拉伯文字母正确连写，设置菜单可显示阿拉伯语的 Mod 名称。语言包还可以翻译“千年之梦”的文字和地名（name_data.xmb）。
 
+## [v1.0.1](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.1) — 2026-10-17
+
+### English
+
+- Fixed ground flickering near balloon enemies with TAA or temporal upscaling enabled (#604).
+
+### 简体中文
+
+- 修复启用 TAA 或时序超分辨率时，气球敌人附近的地面闪烁（#604）。
+
 ## [v1.0.0](https://github.com/freefrank/LostOdysseyRecomp/releases/tag/v1.0.0) — 2026-10-17
 
 ### English
